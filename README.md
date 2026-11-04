@@ -23,17 +23,19 @@ Of twee bestanden gelijk zijn, bepaalt de tool met een SHA-256-hash: een digital
 3. **Resultaten beoordelen.**
    - Bij afwijkingen kun je Word-, Excel- en PowerPoint-bestanden inhoudelijk vergelijken (.docx, .xlsx, .pptx).
    - Met **Voorstel toepassen** kiest de tool per inhoud welk exemplaar behouden blijft. Per bestand kun je de keuze aanpassen.
-4. **Opmerkingen toevoegen** per groep. Sla ze op met **Opmerkingen opslaan**; dat geeft een .json-bestand.
+4. **Opmerkingen toevoegen** per groep. Sla ze op met **Opmerkingen opslaan**; dat geeft een .json-bestand. Daarin staan ook de keuzes behouden/verwijderen, de analyse-instellingen, de uit- en ingeklapte groepen en het actieve tabblad.
+   - Later verder werken: analyseer de map en laad het bestand met **Opmerkingen laden**.
+   - Wijken de opgeslagen instellingen af van de huidige, dan zie je welke dat zijn. Met één knop neem je ze over en wordt de map opnieuw geanalyseerd.
 5. **Exporteren** naar een Word-rapport voor de mapbeheerders, of naar Excel.
 
 ### Hercontrole na het opschonen
 
-Laat de mapbeheerders de voorgestelde acties uitvoeren. Kies daarna dezelfde map opnieuw en laad het opmerkingenbestand. Het tabblad **Hercontrole** toont per bestand:
+Laat de mapbeheerders de voorgestelde acties uitvoeren. Kies daarna dezelfde map opnieuw en laad het opmerkingenbestand met het vinkje **Hercontrole uitvoeren** aan. Het tabblad **Hercontrole** toont per bestand:
 
 - **Verwijderen:** uitgevoerd of niet uitgevoerd.
 - **Behouden:** aanwezig of ontbreekt. Staat de inhoud nergens meer in de map, dan krijg je een waarschuwing. Staat de inhoud nog elders, dan meldt de tool dat het bestand mogelijk is verplaatst.
 
-De hercontrole komt ook in het Word-rapport en de Excel-export.
+De hercontrole komt ook in het Word-rapport en de Excel-export. Wil je alleen verder werken met je opmerkingen, zet het vinkje dan uit. Je kunt het later alsnog aanzetten.
 
 ### Uitsluitlijst
 
@@ -72,5 +74,6 @@ Aanbevolen: een actuele versie van **Microsoft Edge** of **Google Chrome**.
 
 | Versie | Wijzigingen |
 |---|---|
+| **v9.1** | Opmerkingenbestand bewaart ook uit- en ingeklapte groepen en het actieve tabblad. Afwijkende instellingen zijn met één knop over te nemen. Vinkje om de hercontrole wel of niet uit te voeren. |
 | **v9** | Hercontrole na het opschonen, uitsluitlijst, grote bestanden in delen hashen, versienummer in rapport/Excel/opmerkingenbestand, één berekening voor overbodige opslag, jaartallen als "(2023)" niet meer als kopie-aanduiding, bediening met het toetsenbord. |
 | **v8** | Eerste versie in deze repository. |
