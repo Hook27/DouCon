@@ -68,10 +68,13 @@ Aanbevolen: een actuele versie van **Microsoft Edge** of **Google Chrome**.
 ## Beperkingen
 
 - **Oudere formaten.** Inhoudelijk vergelijken werkt niet voor .doc, .xls, .ppt en pdf; open die bestanden via de paden. Ook bestanden met een wachtwoord kunnen niet worden vergeleken.
-- **Grote bestanden.** Bestanden vanaf 128 MB worden in delen gehasht. Het geheugengebruik blijft daardoor laag, maar ze worden wel langzamer verwerkt.
+- **Grote bestanden.**
+  - Bestanden van 128 tot 512 MB worden één voor één ingelezen, zodat er nooit meerdere tegelijk in het geheugen staan.
+  - Bestanden vanaf 512 MB worden in delen gehasht. Het geheugengebruik blijft daardoor laag, maar ze worden wel langzamer verwerkt.
+  - Grote bestanden die alleen in grootte overeenkomen, vergelijkt de tool eerst op begin en eind. Alleen als die gelijk zijn, wordt het hele bestand gehasht.
 - **OneDrive.** Bestanden die alleen online staan, downloadt OneDrive eerst naar de pc zodra de tool ze leest.
 - **Opnieuw analyseren.** Gebruikt de bestandslijst van het moment van kiezen; zie de waarschuwing bij de hercontrole.
-- **Opmerkingenbestanden van v8.** Die bevatten geen bestandsgrootte. Bij de hercontrole kan de tool daardoor niet altijd nagaan of de inhoud van een ontbrekend bestand elders nog staat.
+- **Opmerkingenbestanden van v0.8.** Die bevatten geen bestandsgrootte. Bij de hercontrole kan de tool daardoor niet altijd nagaan of de inhoud van een ontbrekend bestand elders nog staat.
 
 ## Testen
 
@@ -91,14 +94,19 @@ Tests draaien:
 npm test
 ```
 
-Met `npm test -- --groot` loopt ook een test met twee bestanden van 130 MB mee. Die controleert het hashen in blokken en duurt wat langer. Draai de tests na elke wijziging aan `index.html`.
+Met `npm test -- --groot` loopt ook een test met twee bestanden van 130 MB mee. Die duurt wat langer. Draai de tests na elke wijziging aan `index.html`.
 
 ## Versies
 
-| Versie | Wijzigingen |
-|---|---|
-| **v9.3** | Verbeteringen na een code-audit: waarschuwing als "Opnieuw analyseren" een verouderde bestandslijst gebruikt (ook in de hercontrole), groepen worden pas opgebouwd bij uitklappen en het filter wacht tot je stopt met typen (veel sneller bij grote mappen), kopie-aanduidingen van de Mac en `(1).txt` correct, LibreOffice-vergrendelbestanden overgeslagen, tegels met het toetsenbord te bedienen, getallen in Excel als getal, en een testsuite in `tests/`. |
-| **v9.2** | Compactere indeling: instellingen klappen in na de analyse, samenvatting op één rij en een vast blok met samenvatting, tabbladen en werkbalk dat bij het scrollen in beeld blijft. Klik op een tegel in de samenvatting om naar het bijbehorende tabblad te gaan. |
-| **v9.1** | Opmerkingenbestand bewaart ook uit- en ingeklapte groepen en het actieve tabblad. Afwijkende instellingen zijn met één knop over te nemen. Vinkje om de hercontrole wel of niet uit te voeren. |
-| **v9** | Hercontrole na het opschonen, uitsluitlijst, grote bestanden in delen hashen, versienummer in rapport/Excel/opmerkingenbestand, één berekening voor overbodige opslag, jaartallen als "(2023)" niet meer als kopie-aanduiding, bediening met het toetsenbord. |
-| **v8** | Eerste versie in deze repository. |
+De tool is met **v1.0** af. De versies daarvoor heetten v8, v9, v9.1, v9.2 en v9.3. Omdat die eigenlijk aan v1.0 voorafgingen, zijn ze hernummerd naar v0.8 tot en met v0.9.3.
+
+Rapporten, Excel-exports en opmerkingenbestanden die met een oud nummer zijn gemaakt, blijven gewoon bruikbaar. Bij de hercontrole toont de tool het oude nummer als v0.x, dus "v9.1" wordt "v0.9.1".
+
+| Versie | Voorheen | Wijzigingen |
+|---|---|---|
+| **v1.0** | | Eerste definitieve versie. **Grote bestanden:** die met dezelfde grootte worden eerst op begin en eind vergeleken, en bestanden van 128 tot 512 MB worden snel en één voor één gehasht. **Hercontrole:** sneller bij veel keuzes. **Excel-vergelijking:** ondersteunt het 1904-datumsysteem en gedeelde formules. Oude versienummers worden als v0.x getoond. |
+| **v0.9.3** | v9.3 | Verbeteringen na een code-audit: waarschuwing als "Opnieuw analyseren" een verouderde bestandslijst gebruikt (ook in de hercontrole), groepen worden pas opgebouwd bij uitklappen en het filter wacht tot je stopt met typen (veel sneller bij grote mappen), kopie-aanduidingen van de Mac en `(1).txt` correct, LibreOffice-vergrendelbestanden overgeslagen, tegels met het toetsenbord te bedienen, getallen in Excel als getal, en een testsuite in `tests/`. |
+| **v0.9.2** | v9.2 | Compactere indeling: instellingen klappen in na de analyse, samenvatting op één rij en een vast blok met samenvatting, tabbladen en werkbalk dat bij het scrollen in beeld blijft. Klik op een tegel in de samenvatting om naar het bijbehorende tabblad te gaan. |
+| **v0.9.1** | v9.1 | Opmerkingenbestand bewaart ook uit- en ingeklapte groepen en het actieve tabblad. Afwijkende instellingen zijn met één knop over te nemen. Vinkje om de hercontrole wel of niet uit te voeren. |
+| **v0.9** | v9 | Hercontrole na het opschonen, uitsluitlijst, grote bestanden in delen hashen, versienummer in rapport/Excel/opmerkingenbestand, één berekening voor overbodige opslag, jaartallen als "(2023)" niet meer als kopie-aanduiding, bediening met het toetsenbord. |
+| **v0.8** | v8 | Eerste versie in deze repository. |
