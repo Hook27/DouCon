@@ -5,21 +5,39 @@
 <!-- Blokkeert alle netwerkverkeer: de tool werkt uitsluitend lokaal in de browser -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Doublurecontrole map (v9.1)</title>
+<title>Doublurecontrole map (v9.2)</title>
 <style>
   :root { --blauw:#0b4f8a; --grijs:#f3f5f8; --rand:#d6dce4; --rood:#b42318; --roodlicht:#fdecea; --groen:#1d7a3e; --groenlicht:#e8f5ec; --oranje:#b54708; --oranjelicht:#fff4e5; }
   * { box-sizing: border-box; }
   body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; background: #fff; color: #1f2933; font-size: 14px; }
-  header { background: var(--blauw); color: #fff; padding: 16px 24px; }
-  header h1 { margin: 0; font-size: 20px; font-weight: 600; }
-  header p { margin: 4px 0 0; opacity: .85; font-size: 13px; }
-  main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
-  .paneel { background: var(--grijs); border: 1px solid var(--rand); border-radius: 6px; padding: 14px 16px; margin-bottom: 16px; }
+  header { background: var(--blauw); color: #fff; padding: 10px 24px; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  header p { margin: 0; opacity: .85; font-size: 13px; }
+  #versieLabel { font-size: 13px; font-weight: 400; opacity: .8; margin-left: 6px; }
+  main { padding: 12px 24px 20px; max-width: 1400px; margin: 0 auto; }
+  .paneel { background: var(--grijs); border: 1px solid var(--rand); border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; }
+  details.instellingen > summary { cursor: pointer; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; list-style: none; }
+  details.instellingen > summary::-webkit-details-marker { display: none; }
+  details.instellingen > summary::before { content: "▸"; color: var(--blauw); width: 10px; }
+  details.instellingen[open] > summary::before { content: "▾"; }
+  details.instellingen[open] #instSamenvatting { display: none; }
+  details.instellingen[open] > .opties { margin-top: 10px; }
+  #instSamenvatting { color: #52606d; font-size: 13px; }
+  .info { display: inline-block; width: 15px; height: 15px; border: 1px solid #8a94a0; border-radius: 50%; color: #52606d; font-size: 10px; font-weight: 600; line-height: 13px; text-align: center; cursor: help; margin-left: 4px; font-style: normal; vertical-align: 1px; }
+  #vastblok { position: sticky; top: 0; z-index: 5; background: #fff; padding-top: 8px; box-shadow: 0 6px 6px -6px rgba(0,0,0,.18); margin-bottom: 10px; }
+  .werkbalk { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 8px 0; }
+  .werkbalk input[type=search] { flex: 1; min-width: 200px; padding: 5px 9px; border: 1px solid var(--rand); border-radius: 4px; font-size: 13px; font-family: inherit; }
+  .werkbalk .scheiding { width: 1px; align-self: stretch; background: var(--rand); margin: 0 4px; }
+  #statusbalk { display: none; gap: 8px; align-items: flex-start; font-size: 12px; color: #52606d; padding: 0 0 8px; }
+  #statusbalk.zichtbaar { display: flex; }
+  #statusbalk.fout { color: var(--rood); }
+  #exportStatus { flex: 1; }
+  #statusWeg { background: none; color: #52606d; border: 0; padding: 0 4px; font-size: 14px; line-height: 1; }
   .paneel h2 { margin: 0 0 10px; font-size: 15px; }
-  .opties { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 6px 20px; margin-bottom: 12px; }
+  .opties { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 6px 20px; margin-bottom: 4px; }
   .opties label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
   .opties small { color: #52606d; display: block; }
-  .knoppen { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .knoppen { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
   button, .knop { background: var(--blauw); color: #fff; border: 0; border-radius: 4px; padding: 8px 14px; font-size: 14px; cursor: pointer; font-family: inherit; }
   button.secundair { background: #fff; color: var(--blauw); border: 1px solid var(--blauw); }
   button.klein { padding: 4px 10px; font-size: 13px; }
@@ -30,16 +48,21 @@
   #voortgang { display: none; }
   progress { width: 100%; height: 14px; }
   #voortgangTekst { font-size: 12px; color: #52606d; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .kaarten { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-bottom: 16px; }
-  .kaart { border: 1px solid var(--rand); border-radius: 6px; padding: 10px 12px; background: #fff; }
-  .kaart .getal { font-size: 22px; font-weight: 600; }
+  .kaarten { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 8px; padding-bottom: 2px; }
+  .kaart { flex: 1 1 0; min-width: 112px; border: 1px solid var(--rand); border-radius: 6px; padding: 6px 10px; background: #fff; }
+  .kaart[data-tab] { cursor: pointer; }
+  .kaart[data-tab]:hover { background: var(--grijs); }
+  .kaart .getal { font-size: 18px; font-weight: 600; line-height: 1.2; white-space: nowrap; }
   .kaart .lbl { font-size: 12px; color: #52606d; }
+  .kaart .sub { font-size: 11px; color: #7b8794; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #lijst .kaarten { flex-wrap: wrap; }
+  #lijst .kaart { min-width: 200px; }
   .kaart.rood { border-left: 4px solid var(--rood); }
   .kaart.groen { border-left: 4px solid var(--groen); }
   .kaart.oranje { border-left: 4px solid var(--oranje); }
   .kaart.blauw { border-left: 4px solid var(--blauw); }
-  .tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--rand); margin-bottom: 12px; flex-wrap: wrap; }
-  .tab { background: none; color: #1f2933; border: 0; border-bottom: 3px solid transparent; border-radius: 0; padding: 8px 14px; margin-bottom: -2px; }
+  .tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--rand); flex-wrap: wrap; }
+  .tab { background: none; color: #1f2933; border: 0; border-bottom: 3px solid transparent; border-radius: 0; padding: 6px 12px; margin-bottom: -2px; }
   .tab.actief { border-bottom-color: var(--blauw); color: var(--blauw); font-weight: 600; }
   .tab.let { color: var(--rood); }
   .filterbalk { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
@@ -73,9 +96,10 @@
   .notitie label, .identpaneel .lbl { display: block; font-weight: 600; font-size: 12px; margin-bottom: 4px; }
   textarea { width: 100%; min-height: 52px; padding: 6px 8px; border: 1px solid var(--rand); border-radius: 4px; font: inherit; resize: vertical; }
   input.foutnotitie { width: 100%; padding: 4px 6px; border: 1px solid var(--rand); border-radius: 4px; font: inherit; font-size: 13px; }
-  .identpaneel { background: var(--groenlicht); border: 1px solid var(--rand); border-radius: 6px; padding: 12px 14px; margin-bottom: 12px; }
-  .identpaneel > div + div { margin-top: 10px; }
-  .identpaneel label.cb { display: flex; gap: 8px; align-items: center; cursor: pointer; font-weight: 600; }
+  .identpaneel { background: var(--groenlicht); border: 1px solid var(--rand); border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; font-size: 13px; }
+  .identpaneel > div + div { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--rand); }
+  .identpaneel textarea { min-height: 36px; }
+  .identpaneel label.cb { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; font-weight: 600; }
   .voorstelbalk { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .vergelijk { padding: 8px 12px; border-top: 1px solid var(--rand); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
   .diffres:empty { display: none; }
@@ -113,8 +137,8 @@
 </head>
 <body>
 <header>
-  <h1>Doublurecontrole map <span id="versieLabel" style="font-size:13px;font-weight:400;opacity:.8;margin-left:6px">v9.1</span></h1>
-  <p>Vergelijkt bestanden in een map (inclusief submappen) op naam en controleert daarna via SHA-256-hash of het om identieke bestanden gaat. Alles draait lokaal in de browser; er wordt niets verzonden.</p>
+  <h1>Doublurecontrole map <span id="versieLabel">v9.2</span></h1>
+  <p title="Vergelijkt bestanden in een map (inclusief submappen) op naam en controleert daarna via SHA-256-hash of het om identieke bestanden gaat.">Zoekt dubbele bestanden op naam en inhoud (SHA-256). Alles draait lokaal in de browser; er wordt niets verzonden.</p>
 </header>
 <main>
   <div id="iframeWaarschuwing" class="paneel" style="display:none;background:var(--oranjelicht);border-color:var(--oranje)">
@@ -122,30 +146,32 @@
   </div>
 
   <section class="paneel">
-    <h2>1. Instellingen</h2>
-    <div class="opties">
-      <label><input type="checkbox" id="optHoofdletter">
-        <span>Hoofdlettergevoelig vergelijken<small>Standaard uit: Windows maakt geen onderscheid tussen hoofd- en kleine letters.</small></span></label>
-      <label><input type="checkbox" id="optExtensie" checked>
-        <span>Extensie meenemen in naamvergelijking<small>Uit: "Rapport.docx" en "Rapport.pdf" gelden als dezelfde naam.</small></span></label>
-      <label><input type="checkbox" id="optKopie">
-        <span>Kopie-aanduidingen negeren<small>"Rapport (1).docx", "Rapport - kopie.docx" en "Kopie van Rapport.docx" gelden als "Rapport.docx". Een jaartal tussen haakjes, zoals "(2023)", blijft staan.</small></span></label>
-      <label><input type="checkbox" id="optSysteem" checked>
-        <span>Systeem- en tijdelijke bestanden overslaan<small>Thumbs.db, desktop.ini, .DS_Store en Office-tijdelijke bestanden (~$...).</small></span></label>
-      <label><input type="checkbox" id="optInhoud" checked>
-        <span>Ook zoeken naar zelfde inhoud met andere naam<small>Alleen bestanden met een gelijke grootte worden gehasht; lege bestanden (0 bytes) worden hierbij niet meegenomen.</small></span></label>
-      <label class="breed" for="optUitsluiten">Uitsluitlijst (mappen en extensies)
-        <small>Gescheiden door komma of puntkomma. Een mapnaam (bijv. <code>Archief</code>) sluit elke map met die naam uit, op elk niveau. Een pad met / (bijv. <code>Projecten/Oud</code>) sluit alleen die map uit, gerekend vanaf de gekozen map. Een extensie begint met een punt (bijv. <code>.tmp</code>). Het jokerteken * is toegestaan (bijv. <code>Archief*</code>). Hoofdletters maken niet uit.</small>
-        <input type="text" id="optUitsluiten" placeholder="Bijv.: Archief, Oud*, .tmp, .bak" spellcheck="false" autocomplete="off"></label>
-    </div>
+    <details class="instellingen" id="instellingen" open>
+      <summary><b>Instellingen</b><span id="instSamenvatting"></span></summary>
+      <div class="opties">
+        <label title="Standaard uit: Windows maakt geen onderscheid tussen hoofd- en kleine letters."><input type="checkbox" id="optHoofdletter">
+          <span>Hoofdlettergevoelig vergelijken<i class="info">i</i></span></label>
+        <label title="Uit: &quot;Rapport.docx&quot; en &quot;Rapport.pdf&quot; gelden als dezelfde naam."><input type="checkbox" id="optExtensie" checked>
+          <span>Extensie meenemen in naamvergelijking<i class="info">i</i></span></label>
+        <label title="&quot;Rapport (1).docx&quot;, &quot;Rapport - kopie.docx&quot; en &quot;Kopie van Rapport.docx&quot; gelden als &quot;Rapport.docx&quot;. Een jaartal tussen haakjes, zoals &quot;(2023)&quot;, blijft staan."><input type="checkbox" id="optKopie">
+          <span>Kopie-aanduidingen negeren<i class="info">i</i></span></label>
+        <label title="Thumbs.db, desktop.ini, .DS_Store en Office-tijdelijke bestanden (~$...)."><input type="checkbox" id="optSysteem" checked>
+          <span>Systeem- en tijdelijke bestanden overslaan<i class="info">i</i></span></label>
+        <label title="Alleen bestanden met een gelijke grootte worden gehasht; lege bestanden (0 bytes) worden hierbij niet meegenomen."><input type="checkbox" id="optInhoud" checked>
+          <span>Ook zoeken naar zelfde inhoud met andere naam<i class="info">i</i></span></label>
+        <label class="breed" for="optUitsluiten" title="Een mapnaam (bijv. Archief) sluit elke map met die naam uit, op elk niveau. Een pad met / (bijv. Projecten/Oud) sluit alleen die map uit, gerekend vanaf de gekozen map. Een extensie begint met een punt (bijv. .tmp). Het jokerteken * is toegestaan (bijv. Archief*). Hoofdletters maken niet uit.">Uitsluitlijst<i class="info">i</i>
+          <small>Mapnaam (<code>Archief</code>), pad (<code>Projecten/Oud</code>) of extensie (<code>.tmp</code>), gescheiden door komma; <code>*</code> als jokerteken.</small>
+          <input type="text" id="optUitsluiten" placeholder="Bijv.: Archief, Oud*, .tmp, .bak" spellcheck="false" autocomplete="off"></label>
+      </div>
+    </details>
     <div class="knoppen">
-      <label for="kiezer" class="knop" id="kiezerLabel" tabindex="0" role="button">Map kiezen en analyseren</label>
+      <label for="kiezer" class="knop" id="kiezerLabel" tabindex="0" role="button" title="De browser vraagt mogelijk of u de bestanden wilt &quot;uploaden&quot;. Dit is een standaardmelding: de bestanden worden alleen lokaal gelezen. Bestanden die alleen online in OneDrive/SharePoint staan, worden bij het lezen eerst gedownload.">Map kiezen en analyseren</label>
       <input type="file" id="kiezer" webkitdirectory directory multiple>
       <button id="opnieuw" class="secundair" disabled>Opnieuw analyseren met gewijzigde instellingen</button>
       <button id="stop" class="secundair" disabled>Afbreken</button>
       <span id="mapNaam" class="hint"></span>
     </div>
-    <div class="hint">De browser vraagt mogelijk of u de bestanden wilt "uploaden". Dit is een standaardmelding: de bestanden worden alleen lokaal gelezen. Bestanden die alleen online in OneDrive/SharePoint staan, worden bij het lezen eerst gedownload.</div>
+    <div class="hint" id="uploadHint">De browser vraagt mogelijk of u de bestanden wilt "uploaden". Dit is een standaardmelding: de bestanden worden alleen lokaal gelezen.</div>
     <div id="voortgang" style="margin-top:12px">
       <progress id="voortgangBalk" value="0" max="1"></progress>
       <div id="voortgangTekst"></div>
@@ -153,30 +179,31 @@
   </section>
 
   <section id="resultaat" style="display:none">
-    <div class="kaarten" id="kaarten"></div>
-    <div class="tabs" id="tabs"></div>
-    <div class="filterbalk">
-      <input type="search" id="filter" placeholder="Filter op bestandsnaam of pad...">
-      <button class="secundair" id="alleOpen">Alles uitklappen</button>
-      <button class="secundair" id="alleDicht">Alles inklappen</button>
+    <div id="vastblok">
+      <div class="kaarten" id="kaarten"></div>
+      <div class="tabs" id="tabs"></div>
+      <div class="werkbalk">
+        <input type="search" id="filter" placeholder="Filter op bestandsnaam of pad...">
+        <button class="secundair klein" id="alleOpen">Alles uitklappen</button>
+        <button class="secundair klein" id="alleDicht">Alles inklappen</button>
+        <span class="scheiding"></span>
+        <button class="klein" id="exportXlsx">Excel</button>
+        <button class="klein" id="exportRapport">Word-rapport</button>
+        <span class="scheiding"></span>
+        <button class="secundair klein" id="voortgangOpslaan">Opmerkingen opslaan</button>
+        <button class="secundair klein" id="voortgangLaden">Opmerkingen laden</button>
+        <input type="file" id="importKiezer" accept=".json,application/json">
+        <label class="vinkje" title="Hercontrole na het opschonen: kies dezelfde map opnieuw en laad het opmerkingenbestand met dit vinkje aan. Het tabblad Hercontrole toont dan per voorgestelde actie of die is uitgevoerd. Uit: alleen opmerkingen en keuzes laden."><input type="checkbox" id="optHercontrole" checked> Hercontrole uitvoeren<i class="info">i</i></label>
+      </div>
+      <div id="statusbalk"><span id="exportStatus"></span><button id="statusWeg" title="Melding sluiten" aria-label="Melding sluiten">✕</button></div>
     </div>
-    <div class="filterbalk">
-      <button id="exportXlsx">Exporteren naar Excel</button>
-      <button id="exportRapport">Rapport (Word)</button>
-      <button class="secundair" id="voortgangOpslaan">Opmerkingen opslaan</button>
-      <button class="secundair" id="voortgangLaden">Opmerkingen laden</button>
-      <input type="file" id="importKiezer" accept=".json,application/json">
-      <label class="vinkje" title="Uit: alleen opmerkingen en keuzes laden, zonder tabblad Hercontrole"><input type="checkbox" id="optHercontrole" checked> Hercontrole uitvoeren</label>
-    </div>
-    <div class="hint" style="margin:0 0 6px">Hercontrole na het opschonen: kies dezelfde map opnieuw en laad het opmerkingenbestand met het vinkje Hercontrole uitvoeren aan. Het tabblad Hercontrole toont dan per voorgestelde actie of die is uitgevoerd.</div>
-    <div id="exportStatus" class="hint" style="margin:0 0 12px"></div>
     <div id="instellingenVoorstel"></div>
     <div id="lijst"></div>
   </section>
 </main>
 <script>
 "use strict";
-const VERSIE = "v9.1";
+const VERSIE = "v9.2";
 const $ = id => document.getElementById(id);
 const state = {
   bestanden: [], mapNaam: "", res: null, stop: false, tab: "afw", busy: false,
@@ -333,7 +360,20 @@ function zetBezig(b) {
   $("voortgang").style.display = b ? "block" : "none";
 }
 function startBezig() { state.stop = false; state.stopBelofte = new Promise(res => { state.stopSein = res; }); zetBezig(true); }
-function meldExport(tekst, fout) { const el = $("exportStatus"); el.textContent = tekst; el.style.color = fout ? "var(--rood)" : ""; }
+function meldExport(tekst, fout) {
+  $("exportStatus").textContent = tekst;
+  $("statusbalk").classList.toggle("zichtbaar", !!tekst);
+  $("statusbalk").classList.toggle("fout", !!fout);
+}
+// Korte samenvatting van de instellingen, zichtbaar als het paneel is ingeklapt
+function toonInstSamenvatting() {
+  const o = leesOpties();
+  $("instSamenvatting").textContent = [
+    "hoofdletters " + jn(o.hoofdletter), "extensie " + jn(o.extensie), "kopie-aanduidingen negeren " + jn(o.kopie),
+    "systeembestanden overslaan " + jn(o.systeem), "zelfde inhoud zoeken " + jn(o.inhoud),
+    "uitsluitlijst: " + (o.uitsluiten.length ? o.uitsluiten.join(", ") : "geen")
+  ].join(" · ");
+}
 function markeerGewijzigd() { state.gewijzigd = true; }
 function toonMapNaam() {
   $("mapNaam").textContent = state.mapNaam ? `Gekozen map: ${state.mapNaam} (${state.bestanden.length.toLocaleString("nl-NL")} bestanden)` : "";
@@ -464,6 +504,7 @@ async function analyseer(bestanden, mapNaam, nieuweMap) {
   state.bestanden = bestanden; state.mapNaam = mapNaam;
   state.diffs = new Map();
   zetBezig(false); toonMapNaam();
+  $("instellingen").open = false; $("uploadHint").style.display = "none"; toonInstSamenvatting();
 
   let melding = "", fout = false;
   if (nieuweMap) {
@@ -739,20 +780,24 @@ function toon() {
 function toonKaarten() {
   const r = state.res;
   const vv = voorgesteldVerwijderen();
-  const extra = [r.overgeslagen ? `${r.overgeslagen} systeembestanden overgeslagen` : "", r.uitgesloten ? `${r.uitgesloten} uitgesloten via uitsluitlijst` : "",
-    r.o.inhoud && r.leeg ? `${r.leeg} lege bestanden niet op inhoud vergeleken` : ""].filter(Boolean).join("; ");
+  const extra = [r.overgeslagen ? `${r.overgeslagen} systeembestand(en) overgeslagen` : "", r.uitgesloten ? `${r.uitgesloten} uitgesloten via uitsluitlijst` : "",
+    r.o.inhoud && r.leeg ? `${r.leeg} lege bestanden niet op inhoud vergeleken` : ""].filter(Boolean);
+  const nIdent = r.ident.reduce((s, g) => s + g.items.length, 0);
+  // [kleur, getal, label, subregel, tooltip, tabblad]
   const kaarten = [
-    ["", r.totaal, "bestanden geanalyseerd" + (extra ? ` (${extra})` : "")],
-    ["", r.naamGroepen, "namen die meer dan eens voorkomen"],
-    ["rood", r.afw.length, "zelfde naam, afwijkende inhoud (handmatig beoordelen)"],
-    ["groen", r.ident.length, `identieke doublures (${r.ident.reduce((s, g) => s + g.items.length, 0)} bestanden)`]
+    ["", r.totaal, "geanalyseerd", [r.overgeslagen ? `${r.overgeslagen} overgeslagen` : "", r.uitgesloten ? `${r.uitgesloten} uitgesloten` : ""].filter(Boolean).join(" · "),
+      "bestanden geanalyseerd" + (extra.length ? " (" + extra.join("; ") + ")" : "")],
+    ["", r.naamGroepen, "namen dubbel", "", "namen die meer dan eens voorkomen"],
+    ["rood", r.afw.length, "afwijkend", "handmatig beoordelen", "zelfde naam, afwijkende inhoud: handmatig beoordelen", "afw"],
+    ["groen", r.ident.length, "identiek", `${nIdent} bestanden`, `identieke doublures: ${r.ident.length} groepen met samen ${nIdent} bestanden`, "ident"]
   ];
-  if (r.o.inhoud) kaarten.push(["oranje", r.inh.length, "zelfde inhoud, andere naam"]);
-  kaarten.push(["blauw", fmtGrootte(r.overbodig), `overbodige opslag (${r.overbodigN} bestanden te veel als van elke inhoud één exemplaar blijft)`]);
-  if (r.onleesbaar.length) kaarten.push(["rood", r.onleesbaar.length, "bestanden niet leesbaar (zie tab Niet leesbaar)"]);
-  if (vv.n) kaarten.push([vv.alles ? "rood" : "blauw", vv.n, `voorgesteld te verwijderen (${fmtGrootte(vv.bytes)})` + (vv.alles ? `; let op: van ${vv.alles} inhoud(en) staan alle exemplaren op verwijderen` : "")]);
-  $("kaarten").innerHTML = kaarten.map(([c, n, l]) =>
-    `<div class="kaart ${c}"><div class="getal">${esc(typeof n === "number" ? n.toLocaleString("nl-NL") : n)}</div><div class="lbl">${esc(l)}</div></div>`).join("");
+  if (r.o.inhoud) kaarten.push(["oranje", r.inh.length, "zelfde inhoud", "andere naam", "zelfde inhoud, andere naam", "inh"]);
+  kaarten.push(["blauw", fmtGrootte(r.overbodig), "overbodig", `${r.overbodigN} bestanden te veel`, `overbodige opslag: ${r.overbodigN} bestanden te veel als van elke inhoud één exemplaar blijft`]);
+  if (r.onleesbaar.length) kaarten.push(["rood", r.onleesbaar.length, "niet leesbaar", "zie tabblad", "bestanden niet leesbaar (zie tabblad Niet leesbaar)", "fout"]);
+  if (vv.n) kaarten.push([vv.alles ? "rood" : "blauw", vv.n, "te verwijderen", fmtGrootte(vv.bytes) + (vv.alles ? " · let op" : ""),
+    `voorgesteld te verwijderen (${fmtGrootte(vv.bytes)})` + (vv.alles ? `; let op: van ${vv.alles} inhoud(en) staan alle exemplaren op verwijderen` : "")]);
+  $("kaarten").innerHTML = kaarten.map(([c, n, l, sub, tip, tab]) =>
+    `<div class="kaart ${c}" title="${esc(tip)}"${tab ? ` data-tab="${tab}"` : ""}><div class="getal">${esc(typeof n === "number" ? n.toLocaleString("nl-NL") : n)}</div><div class="lbl">${esc(l)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}</div>`).join("");
 }
 
 function toonTabs() {
@@ -765,15 +810,15 @@ function toonTabs() {
   $("tabs").innerHTML = tabs.map(([k, l, c]) => `<button class="tab ${c || ""} ${state.tab === k ? "actief" : ""}" data-tab="${k}">${esc(l)}</button>`).join("");
 }
 
-function opmerkingPaneel() {
-  return `<div class="identpaneel"><div><label class="cb"><input type="checkbox" id="identEen" ${state.identEen ? "checked" : ""}> Eén opmerking voor alle identieke doublures</label>
+function opmerkingDeel() {
+  return `<div><label class="cb"><input type="checkbox" id="identEen" ${state.identEen ? "checked" : ""}> Eén opmerking voor alle identieke doublures</label>
     ${state.identEen
       ? `<textarea id="identAlgemeen" style="margin-top:6px" placeholder="Bijv.: Verwijder per groep de exemplaren die als 'verwijderen' zijn gemarkeerd.">${esc(state.identAlgemeen)}</textarea>`
-      : `<div class="hint" style="margin-top:4px">Per groep is een eigen opmerkingenveld beschikbaar.</div>`}</div></div>`;
+      : `<span class="hint" style="margin-left:8px">Per groep is een eigen opmerkingenveld beschikbaar.</span>`}</div>`;
 }
-function voorstelPaneel() {
-  return `<div class="identpaneel"><div><span class="lbl">Voorstel welke exemplaren verwijderd kunnen worden</span>
-    <div class="voorstelbalk">Per inhoud behouden:
+const VOORSTEL_UITLEG = "Het voorstel geldt per inhoud: van alle identieke bestanden (ook met een andere naam) blijft er één behouden. Bij kopiëren via Verkenner blijft de wijzigingsdatum gelijk; de tool meldt het dan als de datum geen uitsluitsel gaf. Keuzes zijn per bestand aan te passen in de kolom Actie en worden overgenomen in het Word-rapport en de Excel-export.";
+function voorstelDeel() {
+  return `<div><div class="voorstelbalk"><b>Voorstel:</b> per inhoud behouden:
       <select id="voorstelRegel">
         <option value="oudste">bestand met de oudste wijzigingsdatum</option>
         <option value="nieuwste">bestand met de nieuwste wijzigingsdatum</option>
@@ -783,9 +828,8 @@ function voorstelPaneel() {
       <label style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="voorstelOverschrijf"> bestaande keuzes overschrijven</label>
       <button class="klein" id="voorstelToepassen">Voorstel toepassen</button>
       <button class="klein secundair" id="voorstelWissen">Alle keuzes wissen</button>
-    </div>
-    <div class="hint">Het voorstel geldt per inhoud: van alle identieke bestanden (ook met een andere naam) blijft er één behouden. Bij kopiëren via Verkenner blijft de wijzigingsdatum gelijk; de tool meldt het dan als de datum geen uitsluitsel gaf. Keuzes zijn per bestand aan te passen in de kolom Actie en worden overgenomen in het Word-rapport en de Excel-export.</div>
-  </div></div>`;
+      <i class="info" title="${esc(VOORSTEL_UITLEG)}">i</i>
+    </div></div>`;
 }
 
 function groepHtml(g) {
@@ -863,8 +907,8 @@ function toonLijst() {
     return;
   }
   let kop = "";
-  if (state.tab === "ident" && r.ident.length) kop = opmerkingPaneel() + voorstelPaneel();
-  if (state.tab === "inh" && r.inh.length) kop = voorstelPaneel();
+  if (state.tab === "ident" && r.ident.length) kop = `<div class="identpaneel">${opmerkingDeel()}${voorstelDeel()}</div>`;
+  if (state.tab === "inh" && r.inh.length) kop = `<div class="identpaneel">${voorstelDeel()}</div>`;
   const groepen = r[state.tab] || [];
   const zicht = f ? groepen.filter(g => g.items.some(match)) : groepen;
   $("lijst").innerHTML = kop + (zicht.length ? zicht.map(groepHtml).join("") : leeg);
@@ -1665,6 +1709,7 @@ async function instellingenOvernemen() {
   $("optSysteem").checked = !!o.systeem; $("optInhoud").checked = !!o.inhoud;
   $("optUitsluiten").value = o.uitsluiten.join(", ");
   try { localStorage.setItem(UITSLUIT_SLEUTEL, $("optUitsluiten").value); } catch (e) {}
+  toonInstSamenvatting();
   await analyseer(state.bestanden, state.mapNaam, false);
   if (state.stop) return;                       // afgebroken: de vorige resultaten blijven staan
   await laadGegevens(data);                     // keuzes die eerder niet pasten, opnieuw koppelen
@@ -1693,9 +1738,19 @@ $("kiezerLabel").addEventListener("keydown", e => {
 const UITSLUIT_SLEUTEL = "doublurecontrole.uitsluitlijst";
 try { const v = localStorage.getItem(UITSLUIT_SLEUTEL); if (v) $("optUitsluiten").value = v; } catch (e) {}
 $("optUitsluiten").addEventListener("input", e => { try { localStorage.setItem(UITSLUIT_SLEUTEL, e.target.value); } catch (err) {} });
+toonInstSamenvatting();
 $("stop").onclick = () => { state.stop = true; if (state.stopSein) state.stopSein(); };
 $("filter").addEventListener("input", () => state.res && toonLijst());
-$("tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (!b) return; state.tab = b.dataset.tab; toonTabs(); toonLijst(); });
+function kiesTab(tab) {
+  state.tab = tab; toonTabs(); toonLijst();
+  // Was de lijst al naar beneden gescrold, dan terug naar het begin (net onder het vaste blok)
+  const top = $("resultaat").getBoundingClientRect().top + window.scrollY;
+  if (window.scrollY > top) window.scrollTo({ top });
+}
+$("tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) kiesTab(b.dataset.tab); });
+$("kaarten").addEventListener("click", e => { const k = e.target.closest(".kaart[data-tab]"); if (k && state.res) kiesTab(k.dataset.tab); });
+$("statusWeg").onclick = () => meldExport("");
+document.querySelectorAll("#instellingen input").forEach(el => el.addEventListener("input", toonInstSamenvatting));
 $("alleOpen").onclick = () => document.querySelectorAll("details.groep").forEach(d => d.open = true);
 $("alleDicht").onclick = () => document.querySelectorAll("details.groep").forEach(d => d.open = false);
 $("exportXlsx").onclick = () => exporteer("xlsx");
