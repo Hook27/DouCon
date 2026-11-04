@@ -5,7 +5,7 @@
 <!-- Blokkeert alle netwerkverkeer: de tool werkt uitsluitend lokaal in de browser -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Doublurecontrole map (v9.2)</title>
+<title>Doublurecontrole map (v9.3)</title>
 <style>
   :root { --blauw:#0b4f8a; --grijs:#f3f5f8; --rand:#d6dce4; --rood:#b42318; --roodlicht:#fdecea; --groen:#1d7a3e; --groenlicht:#e8f5ec; --oranje:#b54708; --oranjelicht:#fff4e5; }
   * { box-sizing: border-box; }
@@ -33,7 +33,6 @@
   #statusbalk.fout { color: var(--rood); }
   #exportStatus { flex: 1; }
   #statusWeg { background: none; color: #52606d; border: 0; padding: 0 4px; font-size: 14px; line-height: 1; }
-  .paneel h2 { margin: 0 0 10px; font-size: 15px; }
   .opties { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 6px 20px; margin-bottom: 4px; }
   .opties label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
   .opties small { color: #52606d; display: block; }
@@ -52,6 +51,7 @@
   .kaart { flex: 1 1 0; min-width: 112px; border: 1px solid var(--rand); border-radius: 6px; padding: 6px 10px; background: #fff; }
   .kaart[data-tab] { cursor: pointer; }
   .kaart[data-tab]:hover { background: var(--grijs); }
+  .kaart:focus-visible { outline: 2px solid #f5a623; outline-offset: 2px; }
   .kaart .getal { font-size: 18px; font-weight: 600; line-height: 1.2; white-space: nowrap; }
   .kaart .lbl { font-size: 12px; color: #52606d; }
   .kaart .sub { font-size: 11px; color: #7b8794; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -65,8 +65,6 @@
   .tab { background: none; color: #1f2933; border: 0; border-bottom: 3px solid transparent; border-radius: 0; padding: 6px 12px; margin-bottom: -2px; }
   .tab.actief { border-bottom-color: var(--blauw); color: var(--blauw); font-weight: 600; }
   .tab.let { color: var(--rood); }
-  .filterbalk { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
-  .filterbalk input[type=search] { flex: 1; min-width: 240px; padding: 7px 10px; border: 1px solid var(--rand); border-radius: 4px; font-size: 14px; }
   details.groep { border: 1px solid var(--rand); border-radius: 6px; margin-bottom: 8px; background: #fff; }
   details.groep > summary { padding: 8px 12px; cursor: pointer; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   details.groep.afw > summary { background: var(--roodlicht); }
@@ -137,7 +135,7 @@
 </head>
 <body>
 <header>
-  <h1>Doublurecontrole map <span id="versieLabel">v9.2</span></h1>
+  <h1>Doublurecontrole map <span id="versieLabel">v9.3</span></h1>
   <p title="Vergelijkt bestanden in een map (inclusief submappen) op naam en controleert daarna via SHA-256-hash of het om identieke bestanden gaat.">Zoekt dubbele bestanden op naam en inhoud (SHA-256). Alles draait lokaal in de browser; er wordt niets verzonden.</p>
 </header>
 <main>
@@ -153,9 +151,9 @@
           <span>Hoofdlettergevoelig vergelijken<i class="info">i</i></span></label>
         <label title="Uit: &quot;Rapport.docx&quot; en &quot;Rapport.pdf&quot; gelden als dezelfde naam."><input type="checkbox" id="optExtensie" checked>
           <span>Extensie meenemen in naamvergelijking<i class="info">i</i></span></label>
-        <label title="&quot;Rapport (1).docx&quot;, &quot;Rapport - kopie.docx&quot; en &quot;Kopie van Rapport.docx&quot; gelden als &quot;Rapport.docx&quot;. Een jaartal tussen haakjes, zoals &quot;(2023)&quot;, blijft staan."><input type="checkbox" id="optKopie">
+        <label title="&quot;Rapport (1).docx&quot;, &quot;Rapport - kopie.docx&quot;, &quot;Rapport kopie 2.docx&quot; (Mac) en &quot;Kopie van Rapport.docx&quot; gelden als &quot;Rapport.docx&quot;. Een jaartal tussen haakjes, zoals &quot;(2023)&quot;, blijft staan."><input type="checkbox" id="optKopie">
           <span>Kopie-aanduidingen negeren<i class="info">i</i></span></label>
-        <label title="Thumbs.db, desktop.ini, .DS_Store en Office-tijdelijke bestanden (~$...)."><input type="checkbox" id="optSysteem" checked>
+        <label title="Thumbs.db, desktop.ini, .DS_Store, Office-tijdelijke bestanden (~$..., ~...tmp) en LibreOffice-vergrendelbestanden (.~lock...)."><input type="checkbox" id="optSysteem" checked>
           <span>Systeem- en tijdelijke bestanden overslaan<i class="info">i</i></span></label>
         <label title="Alleen bestanden met een gelijke grootte worden gehasht; lege bestanden (0 bytes) worden hierbij niet meegenomen."><input type="checkbox" id="optInhoud" checked>
           <span>Ook zoeken naar zelfde inhoud met andere naam<i class="info">i</i></span></label>
@@ -167,7 +165,7 @@
     <div class="knoppen">
       <label for="kiezer" class="knop" id="kiezerLabel" tabindex="0" role="button" title="De browser vraagt mogelijk of u de bestanden wilt &quot;uploaden&quot;. Dit is een standaardmelding: de bestanden worden alleen lokaal gelezen. Bestanden die alleen online in OneDrive/SharePoint staan, worden bij het lezen eerst gedownload.">Map kiezen en analyseren</label>
       <input type="file" id="kiezer" webkitdirectory directory multiple>
-      <button id="opnieuw" class="secundair" disabled>Opnieuw analyseren met gewijzigde instellingen</button>
+      <button id="opnieuw" class="secundair" disabled title="Analyseert dezelfde bestandslijst opnieuw met de huidige instellingen. Let op: de browser gebruikt de lijst van het moment waarop de map werd gekozen. Zijn er sindsdien bestanden verwijderd, toegevoegd of gewijzigd (bijv. na het opschonen), kies de map dan opnieuw.">Opnieuw analyseren met gewijzigde instellingen</button>
       <button id="stop" class="secundair" disabled>Afbreken</button>
       <span id="mapNaam" class="hint"></span>
     </div>
@@ -181,7 +179,7 @@
   <section id="resultaat" style="display:none">
     <div id="vastblok">
       <div class="kaarten" id="kaarten"></div>
-      <div class="tabs" id="tabs"></div>
+      <div class="tabs" id="tabs" role="tablist"></div>
       <div class="werkbalk">
         <input type="search" id="filter" placeholder="Filter op bestandsnaam of pad...">
         <button class="secundair klein" id="alleOpen">Alles uitklappen</button>
@@ -203,7 +201,7 @@
 </main>
 <script>
 "use strict";
-const VERSIE = "v9.2";
+const VERSIE = "v9.3";
 const $ = id => document.getElementById(id);
 const state = {
   bestanden: [], mapNaam: "", res: null, stop: false, tab: "afw", busy: false,
@@ -232,21 +230,23 @@ const fmtGrootte = b => {
 };
 const fmtDatum = ms => ms ? new Date(ms).toLocaleString("nl-NL", { dateStyle: "short", timeStyle: "short" }) : "";
 const SYS = /^(thumbs\.db|desktop\.ini|\.ds_store|ehthumbs\.db)$/i;
-const isSysteem = n => SYS.test(n) || n.startsWith("~$") || n.startsWith("._");
+const isSysteem = n => SYS.test(n) || n.startsWith("~$") || n.startsWith("._") || n.startsWith(".~lock.") || /^~.*\.tmp$/i.test(n);
 function splitExt(n) { const i = n.lastIndexOf("."); return i > 0 ? [n.slice(0, i), n.slice(i)] : [n, ""]; }
 
 function naamSleutel(naam, o) {
-  let [basis, ext] = splitExt(naam);
+  // NFC: dezelfde naam kan op een Mac anders zijn vastgelegd (NFD) dan op Windows
+  let [basis, ext] = splitExt(naam.normalize("NFC"));
   if (o.kopie) {
-    let vorige;
-    do {
-      vorige = basis;
-      basis = basis
+    for (;;) {
+      const volgende = basis
         .replace(/^(kopie van|copy of)\s+/i, "")
-        .replace(/\s*-\s*(kopie|copy)(\s*\(\d{1,3}\))?$/i, "")
-        .replace(/\s*\(\d{1,3}\)$/, "")
+        .replace(/\s*-\s*(kopie|copy)(\s*\(\d{1,3}\))?$/i, "")   // Windows: "Rapport - Kopie (2)"
+        .replace(/\s+(kopie|copy)(\s+\d{1,3})?$/i, "")              // Mac: "Rapport kopie 2"
+        .replace(/\s*\(\d{1,3}\)$/, "")                            // "Rapport (1)"
         .trim();
-    } while (basis !== vorige && basis.length);
+      if (volgende === basis || !volgende.length) break;           // niets meer weg te halen, of de naam zou leeg worden
+      basis = volgende;
+    }
   }
   const k = o.extensie ? basis + ext : basis;
   return o.hoofdletter ? k : k.toLocaleLowerCase("nl-NL");
@@ -496,6 +496,11 @@ async function analyseer(bestanden, mapNaam, nieuweMap) {
   let overbodig = 0, overbodigN = 0;
   for (const p of perInhoud.values()) { overbodig += p.grootte * (p.n - 1); if (p.grootte) overbodigN += p.n - 1; }
 
+  // Opnieuw analyseren gebruikt de bestandslijst van het moment van kiezen. Bestanden die sindsdien zijn verwijderd of
+  // gewijzigd, geven nu een leesfout; die tellen we om de gebruiker te wijzen op opnieuw kiezen.
+  const vorigeFouten = (state.res && bestanden === state.bestanden) ? new Set(state.res.onleesbaar.map(x => x.pad)) : null;
+  const verouderd = vorigeFouten ? onleesbaar.filter(x => !vorigeFouten.has(x.pad) && /^(NotFoundError|NotReadableError)$/.test(x.fout || "")).length : 0;
+
   // Bestaande invoer vastleggen voordat de oude resultaten worden vervangen
   const snapshot = (!nieuweMap && state.res) ? notitieLijst() : null;
 
@@ -527,6 +532,10 @@ async function analyseer(bestanden, mapNaam, nieuweMap) {
   if (state.tab === "inh" && !o.inhoud) state.tab = "afw";
   if (state.tab === "fout" && !onleesbaar.length) state.tab = "afw";
   if (state.tab === "nietgek" && !state.nietGekoppeld.length) state.tab = "afw";
+  if (verouderd) {
+    fout = true;
+    melding = `Let op: ${verouderd} bestand(en) zijn sinds het kiezen van de map verwijderd of gewijzigd en staan nu bij Niet leesbaar. "Opnieuw analyseren" gebruikt de bestandslijst van het moment van kiezen; kies de map opnieuw via "Map kiezen en analyseren" voor een actuele analyse.` + (melding ? " " + melding : "");
+  }
   if (state.hercontroleBron && hercontroleAan()) await voerHercontroleUit(state.hercontroleBron);
   else state.hercontrole = null;
   if (state.tab === "herc" && !state.hercontrole) state.tab = "afw";
@@ -646,13 +655,20 @@ async function voerHercontroleUit(bron) {
   const nu = new Map();
   for (const x of alle) if (x.hash) { if (!nu.has(x.hash)) nu.set(x.hash, []); nu.get(x.hash).push(x); }
 
-  const t = { verw: 0, verwUit: 0, verwNiet: 0, beh: 0, behOk: 0, behWeg: 0, verloren: 0, onbekend: 0, problemen: 0 };
+  const t = { verw: 0, verwUit: 0, verwNiet: 0, beh: 0, behOk: 0, behWeg: 0, verloren: 0, onbekend: 0, verouderd: 0, problemen: 0 };
   const verloren = new Set(), rijen = [];
+  const VEROUDERD = " Het bestand staat nog in de bestandslijst van het moment waarop de map werd gekozen, maar is niet meer te lezen: vermoedelijk daarna verwijderd. Kies de map opnieuw voor een zekere uitkomst.";
   for (const a of acties) {
     const x = r.alleOpPad.get(a.pad);
     const elders = a.hash ? (nu.get(a.hash) || []).filter(y => y.pad !== a.pad) : [];
+    // Een bestand met een keuze was bij het opslaan leesbaar; NotFoundError betekent dan dat het na het kiezen van de map is verdwenen
+    const verdwenen = !!(x && x.hash === null && x.fout === "NotFoundError" && a.hash);
     let status, soort, toel = "";
-    if (a.actie === "verwijderen") {
+    if (verdwenen) {
+      t.verouderd++;
+      if (a.actie === "verwijderen") { t.verw++; t.verwUit++; status = "Vermoedelijk uitgevoerd"; soort = "let"; toel = VEROUDERD.trim(); }
+      else { t.beh++; t.behWeg++; status = "Ontbreekt (vermoedelijk)"; soort = "fout"; toel = "Dit bestand moest behouden blijven." + VEROUDERD; }
+    } else if (a.actie === "verwijderen") {
       t.verw++;
       if (!x) { status = "Uitgevoerd"; soort = "ok"; t.verwUit++; toel = elders.length ? "Inhoud blijft behouden in " + elders[0].pad + (elders.length > 1 ? ` (en ${elders.length - 1} andere)` : "") + "." : ""; }
       else {
@@ -693,6 +709,7 @@ function hercontroleSamenvatting(h) {
     ["Voorgesteld te behouden", `${t.beh} bestand(en): ${t.behOk} aanwezig, ${t.behWeg} ontbreekt`, t.behWeg ? "rood" : "groen"],
     ...(t.verloren ? [["Let op: inhoud verdwenen", `van ${t.verloren} inhoud(en) die behouden moest(en) blijven staat geen exemplaar meer in de map`, "rood"]] : []),
     ...(t.onbekend ? [["Niet te controleren", `${t.onbekend} ontbrekend(e) bestand(en) waarvan niet is na te gaan of de inhoud elders staat`, "rood"]] : []),
+    ...(t.verouderd ? [["Verouderde bestandslijst", `${t.verouderd} bestand(en) zijn na het kiezen van de map verdwenen; kies de map opnieuw voor een zekere uitkomst`, "oranje"]] : []),
     ...(h.afgebroken ? [["Afgebroken", "de hercontrole is afgebroken; niet alle bestanden zijn gecontroleerd", "oranje"]] : [])
   ];
 }
@@ -729,7 +746,6 @@ function zetActie(pad, actie) {
   const x = state.res.opPad.get(pad);
   if (actie && x && x.hash) state.acties.set(pad, { actie, hash: x.hash }); else state.acties.delete(pad);
 }
-const heeftActies = g => g.cat === "ident" || g.cat === "inh" || g.cat === "afw";
 // Afwijkingen: blijft na de voorgestelde verwijderingen nog minstens één versie (in deze groep of elders) over?
 function afwAllesWeg(g) {
   const lees = g.items.filter(x => x.hash);
@@ -797,7 +813,7 @@ function toonKaarten() {
   if (vv.n) kaarten.push([vv.alles ? "rood" : "blauw", vv.n, "te verwijderen", fmtGrootte(vv.bytes) + (vv.alles ? " · let op" : ""),
     `voorgesteld te verwijderen (${fmtGrootte(vv.bytes)})` + (vv.alles ? `; let op: van ${vv.alles} inhoud(en) staan alle exemplaren op verwijderen` : "")]);
   $("kaarten").innerHTML = kaarten.map(([c, n, l, sub, tip, tab]) =>
-    `<div class="kaart ${c}" title="${esc(tip)}"${tab ? ` data-tab="${tab}"` : ""}><div class="getal">${esc(typeof n === "number" ? n.toLocaleString("nl-NL") : n)}</div><div class="lbl">${esc(l)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}</div>`).join("");
+    `<div class="kaart ${c}" title="${esc(tip)}"${tab ? ` data-tab="${tab}" tabindex="0" role="button"` : ""}><div class="getal">${esc(typeof n === "number" ? n.toLocaleString("nl-NL") : n)}</div><div class="lbl">${esc(l)}</div>${sub ? `<div class="sub">${esc(sub)}</div>` : ""}</div>`).join("");
 }
 
 function toonTabs() {
@@ -807,7 +823,7 @@ function toonTabs() {
   if (r.onleesbaar.length) tabs.push(["fout", `Niet leesbaar (${r.onleesbaar.length})`]);
   if (state.nietGekoppeld.length) tabs.push(["nietgek", `Niet gekoppelde opmerkingen (${state.nietGekoppeld.length})`, "let"]);
   if (state.hercontrole) tabs.push(["herc", `Hercontrole (${state.hercontrole.rijen.length})`, state.hercontrole.telling.problemen ? "let" : ""]);
-  $("tabs").innerHTML = tabs.map(([k, l, c]) => `<button class="tab ${c || ""} ${state.tab === k ? "actief" : ""}" data-tab="${k}">${esc(l)}</button>`).join("");
+  $("tabs").innerHTML = tabs.map(([k, l, c]) => `<button class="tab ${c || ""} ${state.tab === k ? "actief" : ""}" data-tab="${k}" role="tab" aria-selected="${state.tab === k}">${esc(l)}</button>`).join("");
 }
 
 function opmerkingDeel() {
@@ -846,19 +862,27 @@ function groepHtml(g) {
   if (gelijkeDatum(g)) badges += `<span class="badge" title="Bij kopiëren via Verkenner blijft de wijzigingsdatum behouden">gelijke wijzigingsdatum</span>`;
   const heeftNotitie = !!state.notities.get(g.sleutel) && !(tab === "ident" && state.identEen);
   badges += `<span class="notitiestatus">${heeftNotitie ? `<span class="badge notitie-ja">opmerking</span>` : ""}</span>`;
-  if (heeftActies(g)) badges += `<span class="actiestatus">${actieStatusHtml(g)}</span>`;
-
+  badges += `<span class="actiestatus">${actieStatusHtml(g)}</span>`;
   const titel = tab === "inh" ? [...new Set(g.items.map(x => x.naam))].join("  |  ") : g.items[0].naam;
+  // De inhoud (tabel, vergelijking, opmerking) wordt pas opgebouwd als de groep wordt uitgeklapt: dat scheelt veel tijd bij grote mappen
+  return `<details class="groep ${tab}" data-id="${g.id}" data-sleutel="${esc(g.sleutel)}"${open ? ` open data-geladen="1"` : ""}>
+    <summary><span class="gid">${g.id}</span><span class="gnaam">${esc(titel)}</span>${badges}</summary>
+    ${open ? groepInhoud(g) : ""}
+  </details>`;
+}
+
+function groepInhoud(g) {
+  const tab = g.cat;
   const tr = gesorteerd(g).map(x => {
     const v = vl(g, x);
     const kleur = v === "?" ? "#4d5761" : KLEUREN[(v.charCodeAt(0) - 65) % KLEUREN.length];
     const ook = ookIn(g, x);
     const actie = actieVan(x.pad);
-    const actieCel = heeftActies(g) && !x.hash ? `<td class="hint">n.v.t.</td>` : heeftActies(g) ? `<td><select class="actie" data-pad="${esc(x.pad)}" data-g="${g.id}">
+    const actieCel = !x.hash ? `<td class="hint">n.v.t.</td>` : `<td><select class="actie" data-pad="${esc(x.pad)}" data-g="${g.id}">
         <option value="" ${!actie ? "selected" : ""}>(geen)</option>
         <option value="behouden" ${actie === "behouden" ? "selected" : ""}>Behouden</option>
-        <option value="verwijderen" ${actie === "verwijderen" ? "selected" : ""}>Verwijderen</option></select></td>` : "";
-    const rk = heeftActies(g) ? (actie === "verwijderen" ? "teverw" : actie === "behouden" ? "behoud" : "") : "";
+        <option value="verwijderen" ${actie === "verwijderen" ? "selected" : ""}>Verwijderen</option></select></td>`;
+    const rk = actie === "verwijderen" ? "teverw" : actie === "behouden" ? "behoud" : "";
     return `<tr class="${rk}">
       <td><span class="var" style="background:${kleur}">${esc(v)}</span></td>
       <td class="pad">${padLink(x)}${ook.length ? ` <span class="badge" title="Dit bestand komt ook voor in een andere groep">ook in ${esc(ook.join(", "))}</span>` : ""}</td>
@@ -873,14 +897,11 @@ function groepHtml(g) {
   const notLabel = tab === "afw" ? "Opmerking / uitkomst handmatige vergelijking" : "Opmerking";
   const notitie = (tab === "ident" && state.identEen) ? "" :
     `<div class="notitie"><label for="n_${g.id}">${notLabel}</label><textarea id="n_${g.id}" data-sleutel="${esc(g.sleutel)}" data-g="${g.id}" placeholder="Wat moet er met deze bestanden gebeuren?">${esc(state.notities.get(g.sleutel) || "")}</textarea></div>`;
-  return `<details class="groep ${tab}" data-id="${g.id}" data-sleutel="${esc(g.sleutel)}" ${open ? "open" : ""}>
-    <summary><span class="gid">${g.id}</span><span class="gnaam">${esc(titel)}</span>${badges}</summary>
-    ${toel}
-    <table><thead><tr><th style="width:60px">Variant</th><th>Pad</th><th style="width:90px">Grootte</th><th style="width:190px">Gewijzigd</th><th style="width:170px">SHA-256</th>${heeftActies(g) ? `<th style="width:130px">Actie</th>` : ""}</tr></thead>
+  return `${toel}
+    <table><thead><tr><th style="width:60px">Variant</th><th>Pad</th><th style="width:90px">Grootte</th><th style="width:190px">Gewijzigd</th><th style="width:170px">SHA-256</th><th style="width:130px">Actie</th></tr></thead>
     <tbody>${tr}</tbody></table>
     ${tab === "afw" ? vergelijkBlok(g) : ""}
-    ${notitie}
-  </details>`;
+    ${notitie}`;
 }
 
 function toonLijst() {
@@ -1367,7 +1388,7 @@ function sheetXml(kolommen, rijen) {
     return `<row r="${rn}">` + r.map((v, ci) => {
       if (v == null || v === "") return "";
       const ref = kolLetter(ci) + rn, t = kolommen[ci].type || "s";
-      if (t === "n") return `<c r="${ref}" s="2"><v>${v}</v></c>`;
+      if (t === "n" || (t === "a" && typeof v === "number")) return `<c r="${ref}" s="2"><v>${v}</v></c>`;
       if (t === "d") return `<c r="${ref}" s="3"><v>${v}</v></c>`;
       return `<c r="${ref}" t="inlineStr" s="4"><is><t xml:space="preserve">${xe(v)}</t></is></c>`;
     }).join("") + `</row>`;
@@ -1425,8 +1446,8 @@ function maakXlsx(r, meta) {
     ...instellingenLijst(r.o),
     ["Methode", "Groeperen op bestandsnaam volgens bovenstaande instellingen; daarna SHA-256-hash per bestand. Zelfde variantletter binnen een groep = binair identiek. Voor 'zelfde inhoud, andere naam' worden alleen niet-lege bestanden met een gelijke grootte gehasht."],
     ["Let op", "Een bestand kan in meer dan één groep voorkomen (kolom 'Ook in groep'). Behoud per inhoud ten minste één exemplaar."]
-  ].map(([a, b]) => [a, String(b)]);
-  bladen.push({ naam: "Toelichting", xml: sheetXml([{ kop: "Onderdeel", breedte: 46 }, { kop: "Waarde", breedte: 100 }], toel) });
+  ].map(([a, b]) => [a, typeof b === "number" ? b : String(b)]);
+  bladen.push({ naam: "Toelichting", xml: sheetXml([{ kop: "Onderdeel", breedte: 46 }, { kop: "Waarde", breedte: 100, type: "a" }], toel) });
 
   const ns = 'xmlns="http://schemas.openxmlformats.org/package/2006/relationships"';
   const n = bladen.length;
@@ -1676,7 +1697,7 @@ async function laadGegevens(data) {
   if (data.identiekAlgemeneOpmerking) state.identAlgemeen = state.identAlgemeen && state.identAlgemeen !== data.identiekAlgemeneOpmerking && !state.identAlgemeen.includes(data.identiekAlgemeneOpmerking) ? state.identAlgemeen + "\n" + data.identiekAlgemeneOpmerking : data.identiekAlgemeneOpmerking;
 
   const verschilInst = data.instellingen && instellingenVerschillen(data.instellingen, r.o);
-  markeerGewijzigd();
+  // Niet als gewijzigd markeren: de stand is gelijk aan het geladen bestand (eventuele eerdere wijzigingen blijven gemarkeerd)
   toon();
   toonInstellingenVoorstel(verschilInst ? data.instellingen : null);
   meldExport(`Geladen: ${k.exact} opmerking(en) exact gekoppeld` +
@@ -1740,7 +1761,8 @@ try { const v = localStorage.getItem(UITSLUIT_SLEUTEL); if (v) $("optUitsluiten"
 $("optUitsluiten").addEventListener("input", e => { try { localStorage.setItem(UITSLUIT_SLEUTEL, e.target.value); } catch (err) {} });
 toonInstSamenvatting();
 $("stop").onclick = () => { state.stop = true; if (state.stopSein) state.stopSein(); };
-$("filter").addEventListener("input", () => state.res && toonLijst());
+let filterTimer = 0;
+$("filter").addEventListener("input", () => { clearTimeout(filterTimer); filterTimer = setTimeout(() => state.res && toonLijst(), 250); });
 function kiesTab(tab) {
   state.tab = tab; toonTabs(); toonLijst();
   // Was de lijst al naar beneden gescrold, dan terug naar het begin (net onder het vaste blok)
@@ -1749,9 +1771,16 @@ function kiesTab(tab) {
 }
 $("tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (b) kiesTab(b.dataset.tab); });
 $("kaarten").addEventListener("click", e => { const k = e.target.closest(".kaart[data-tab]"); if (k && state.res) kiesTab(k.dataset.tab); });
+$("kaarten").addEventListener("keydown", e => {
+  const k = e.target.closest(".kaart[data-tab]"); if (!k || (e.key !== "Enter" && e.key !== " ")) return;
+  e.preventDefault(); if (state.res) kiesTab(k.dataset.tab);
+});
 $("statusWeg").onclick = () => meldExport("");
 document.querySelectorAll("#instellingen input").forEach(el => el.addEventListener("input", toonInstSamenvatting));
-$("alleOpen").onclick = () => document.querySelectorAll("details.groep").forEach(d => d.open = true);
+$("alleOpen").onclick = () => document.querySelectorAll("details.groep").forEach(d => {
+  if (!d.dataset.geladen && state.res) { const g = state.res.perId.get(d.dataset.id); if (g) { d.insertAdjacentHTML("beforeend", groepInhoud(g)); d.dataset.geladen = "1"; } }
+  d.open = true;
+});
 $("alleDicht").onclick = () => document.querySelectorAll("details.groep").forEach(d => d.open = false);
 $("exportXlsx").onclick = () => exporteer("xlsx");
 $("exportRapport").onclick = () => exporteer("docx");
@@ -1768,7 +1797,14 @@ $("optHercontrole").addEventListener("change", async () => {
 });
 
 const L = $("lijst");
-L.addEventListener("toggle", e => { const d = e.target; if (d.matches && d.matches("details.groep")) state.open.set(d.dataset.sleutel, d.open); }, true);
+L.addEventListener("toggle", e => {
+  const d = e.target; if (!d.matches || !d.matches("details.groep")) return;
+  state.open.set(d.dataset.sleutel, d.open);
+  if (d.open && !d.dataset.geladen && state.res) {
+    const g = state.res.perId.get(d.dataset.id);
+    if (g) { d.insertAdjacentHTML("beforeend", groepInhoud(g)); d.dataset.geladen = "1"; }
+  }
+}, true);
 L.addEventListener("click", e => {
   const a = e.target.closest("a.open"); if (a) { e.preventDefault(); openBestand(a.dataset.pad); return; }
   const v = e.target.closest(".vergelijkKnop"); if (v) { doVergelijk(state.res.perId.get(v.dataset.g)); return; }

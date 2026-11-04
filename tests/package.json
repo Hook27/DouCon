@@ -1,0 +1,11 @@
+{
+  "name": "doucon-tests",
+  "private": true,
+  "description": "Tests voor de doublurecontrole (index.html)",
+  "scripts": {
+    "test": "node run.js"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}
