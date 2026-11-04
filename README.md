@@ -74,6 +74,7 @@ Aanbevolen: een actuele versie van **Microsoft Edge** of **Google Chrome**.
 
 | Versie | Wijzigingen |
 |---|---|
+| **v9.2** | Compactere indeling: instellingen klappen in na de analyse, samenvatting op één rij en een vast blok met samenvatting, tabbladen en werkbalk dat bij het scrollen in beeld blijft. Klik op een tegel in de samenvatting om naar het bijbehorende tabblad te gaan. |
 | **v9.1** | Opmerkingenbestand bewaart ook uit- en ingeklapte groepen en het actieve tabblad. Afwijkende instellingen zijn met één knop over te nemen. Vinkje om de hercontrole wel of niet uit te voeren. |
 | **v9** | Hercontrole na het opschonen, uitsluitlijst, grote bestanden in delen hashen, versienummer in rapport/Excel/opmerkingenbestand, één berekening voor overbodige opslag, jaartallen als "(2023)" niet meer als kopie-aanduiding, bediening met het toetsenbord. |
 | **v8** | Eerste versie in deze repository. |
