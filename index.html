@@ -5,7 +5,7 @@
 <!-- Blokkeert alle netwerkverkeer: de tool werkt uitsluitend lokaal in de browser -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Doublurecontrole map (v8)</title>
+<title>Doublurecontrole map (v9)</title>
 <style>
   :root { --blauw:#0b4f8a; --grijs:#f3f5f8; --rand:#d6dce4; --rood:#b42318; --roodlicht:#fdecea; --groen:#1d7a3e; --groenlicht:#e8f5ec; --oranje:#b54708; --oranjelicht:#fff4e5; }
   * { box-sizing: border-box; }
@@ -94,11 +94,23 @@
   ins { background: #cdeed7; color: #0f4d26; text-decoration: none; }
   .diffres table td.verschil { background: var(--oranjelicht); }
   td.opm { white-space: pre-wrap; }
+  .opties .breed { grid-column: 1 / -1; display: block; cursor: default; }
+  .opties .breed input { width: 100%; margin-top: 4px; padding: 6px 8px; border: 1px solid var(--rand); border-radius: 4px; font: inherit; }
+  .opties code { background: #fff; border: 1px solid var(--rand); border-radius: 3px; padding: 0 3px; font-size: 12px; }
+  button:focus-visible, .knop:focus-visible, .tab:focus-visible { outline: 2px solid #f5a623; outline-offset: 2px; }
+  .knop.uit { opacity: .45; cursor: default; }
+  tr.hc-fout td { background: #fff5f4; }
+  tr.hc-let td { background: #fffaf2; }
+  tr.hc-ok td { background: #f3faf5; }
+  td.hc-status { font-weight: 600; white-space: nowrap; }
+  tr.hc-fout td.hc-status { color: var(--rood); }
+  tr.hc-let td.hc-status { color: var(--oranje); }
+  tr.hc-ok td.hc-status { color: var(--groen); }
 </style>
 </head>
 <body>
 <header>
-  <h1>Doublurecontrole map <span style="font-size:13px;font-weight:400;opacity:.8;margin-left:6px">v8</span></h1>
+  <h1>Doublurecontrole map <span id="versieLabel" style="font-size:13px;font-weight:400;opacity:.8;margin-left:6px">v9</span></h1>
   <p>Vergelijkt bestanden in een map (inclusief submappen) op naam en controleert daarna via SHA-256-hash of het om identieke bestanden gaat. Alles draait lokaal in de browser; er wordt niets verzonden.</p>
 </header>
 <main>
@@ -114,14 +126,17 @@
       <label><input type="checkbox" id="optExtensie" checked>
         <span>Extensie meenemen in naamvergelijking<small>Uit: "Rapport.docx" en "Rapport.pdf" gelden als dezelfde naam.</small></span></label>
       <label><input type="checkbox" id="optKopie">
-        <span>Kopie-aanduidingen negeren<small>"Rapport (1).docx", "Rapport - kopie.docx" en "Kopie van Rapport.docx" gelden als "Rapport.docx".</small></span></label>
+        <span>Kopie-aanduidingen negeren<small>"Rapport (1).docx", "Rapport - kopie.docx" en "Kopie van Rapport.docx" gelden als "Rapport.docx". Een jaartal tussen haakjes, zoals "(2023)", blijft staan.</small></span></label>
       <label><input type="checkbox" id="optSysteem" checked>
         <span>Systeem- en tijdelijke bestanden overslaan<small>Thumbs.db, desktop.ini, .DS_Store en Office-tijdelijke bestanden (~$...).</small></span></label>
       <label><input type="checkbox" id="optInhoud" checked>
         <span>Ook zoeken naar zelfde inhoud met andere naam<small>Alleen bestanden met een gelijke grootte worden gehasht; lege bestanden (0 bytes) worden hierbij niet meegenomen.</small></span></label>
+      <label class="breed" for="optUitsluiten">Uitsluitlijst (mappen en extensies)
+        <small>Gescheiden door komma of puntkomma. Een mapnaam (bijv. <code>Archief</code>) sluit elke map met die naam uit, op elk niveau. Een pad met / (bijv. <code>Projecten/Oud</code>) sluit alleen die map uit, gerekend vanaf de gekozen map. Een extensie begint met een punt (bijv. <code>.tmp</code>). Het jokerteken * is toegestaan (bijv. <code>Archief*</code>). Hoofdletters maken niet uit.</small>
+        <input type="text" id="optUitsluiten" placeholder="Bijv.: Archief, Oud*, .tmp, .bak" spellcheck="false" autocomplete="off"></label>
     </div>
     <div class="knoppen">
-      <label for="kiezer" class="knop">Map kiezen en analyseren</label>
+      <label for="kiezer" class="knop" id="kiezerLabel" tabindex="0" role="button">Map kiezen en analyseren</label>
       <input type="file" id="kiezer" webkitdirectory directory multiple>
       <button id="opnieuw" class="secundair" disabled>Opnieuw analyseren met gewijzigde instellingen</button>
       <button id="stop" class="secundair" disabled>Afbreken</button>
@@ -149,12 +164,14 @@
       <button class="secundair" id="voortgangLaden">Opmerkingen laden</button>
       <input type="file" id="importKiezer" accept=".json,application/json">
     </div>
+    <div class="hint" style="margin:0 0 6px">Hercontrole na het opschonen: kies dezelfde map opnieuw en laad het opmerkingenbestand. Het tabblad Hercontrole toont dan per voorgestelde actie of die is uitgevoerd.</div>
     <div id="exportStatus" class="hint" style="margin:0 0 12px"></div>
     <div id="lijst"></div>
   </section>
 </main>
 <script>
 "use strict";
+const VERSIE = "v9";
 const $ = id => document.getElementById(id);
 const state = {
   bestanden: [], mapNaam: "", res: null, stop: false, tab: "afw", busy: false,
@@ -165,6 +182,8 @@ const state = {
   nietGekoppeld: [],        // opmerkingen zonder passende groep: { categorie, paden, opmerking }
   diffs: new Map(),
   open: new Map(),
+  hercontrole: null,        // resultaat van de hercontrole (na laden van een opmerkingenbestand met keuzes)
+  hercontroleBron: null,    // de keuzes uit dat opmerkingenbestand, om na een nieuwe analyse opnieuw te toetsen
   gewijzigd: false
 };
 const KLEUREN = ["#0b4f8a","#b54708","#6941c6","#1d7a3e","#b42318","#0e7090","#c11574","#4d5761"];
@@ -191,8 +210,8 @@ function naamSleutel(naam, o) {
       vorige = basis;
       basis = basis
         .replace(/^(kopie van|copy of)\s+/i, "")
-        .replace(/\s*-\s*(kopie|copy)(\s*\(\d+\))?$/i, "")
-        .replace(/\s*\(\d+\)$/, "")
+        .replace(/\s*-\s*(kopie|copy)(\s*\(\d{1,3}\))?$/i, "")
+        .replace(/\s*\(\d{1,3}\)$/, "")
         .trim();
     } while (basis !== vorige && basis.length);
   }
@@ -200,16 +219,99 @@ function naamSleutel(naam, o) {
   return o.hoofdletter ? k : k.toLocaleLowerCase("nl-NL");
 }
 
+const hex = u8 => Array.from(u8, b => b.toString(16).padStart(2, "0")).join("");
 async function sha256(file) {
   const buf = await file.arrayBuffer();
-  const h = await crypto.subtle.digest("SHA-256", buf);
-  return Array.from(new Uint8Array(h), b => b.toString(16).padStart(2, "0")).join("");
+  return hex(new Uint8Array(await crypto.subtle.digest("SHA-256", buf)));
+}
+
+/* SHA-256 in delen, voor grote bestanden: crypto.subtle kan alleen een volledig ingelezen bestand hashen.
+   Het resultaat is identiek aan dat van crypto.subtle. */
+const SHA_K = new Int32Array([   // Int32Array: V8 rekent daarmee veel sneller dan met Uint32Array
+  0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+  0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+  0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+  0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);
+function sha256Stroom() {
+  const H = new Int32Array([0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19]);
+  const W = new Int32Array(64), rest = new Uint8Array(64); let nRest = 0, totaal = 0;
+  function blok(d, o) {
+    for (let i = 0; i < 16; i++, o += 4) W[i] = (d[o] << 24) | (d[o + 1] << 16) | (d[o + 2] << 8) | d[o + 3];
+    for (let i = 16; i < 64; i++) {
+      const x = W[i - 15], y = W[i - 2];
+      W[i] = W[i - 16] + (((x >>> 7) | (x << 25)) ^ ((x >>> 18) | (x << 14)) ^ (x >>> 3)) + W[i - 7] + (((y >>> 17) | (y << 15)) ^ ((y >>> 19) | (y << 13)) ^ (y >>> 10));
+    }
+    let a = H[0], b = H[1], c = H[2], dd = H[3], e = H[4], f = H[5], g = H[6], h = H[7];
+    for (let i = 0; i < 64; i++) {
+      const t1 = (h + (((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7))) + ((e & f) ^ (~e & g)) + SHA_K[i] + W[i]) | 0;
+      const t2 = ((((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10))) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+      h = g; g = f; f = e; e = (dd + t1) | 0; dd = c; c = b; b = a; a = (t1 + t2) | 0;
+    }
+    H[0] += a; H[1] += b; H[2] += c; H[3] += dd; H[4] += e; H[5] += f; H[6] += g; H[7] += h;
+  }
+  function update(d) {
+    let i = 0; totaal += d.length;
+    if (nRest) { while (nRest < 64 && i < d.length) rest[nRest++] = d[i++]; if (nRest < 64) return; blok(rest, 0); nRest = 0; }
+    for (; i + 64 <= d.length; i += 64) blok(d, i);
+    while (i < d.length) rest[nRest++] = d[i++];
+  }
+  function digest() {
+    const lengte = totaal, pad = new Uint8Array((nRest < 56 ? 56 : 120) - nRest + 8);
+    pad[0] = 0x80;
+    const dv = new DataView(pad.buffer);
+    dv.setUint32(pad.length - 8, Math.floor(lengte / 0x20000000)); dv.setUint32(pad.length - 4, (lengte * 8) >>> 0);
+    update(pad);
+    const uit = new Uint8Array(32), dvu = new DataView(uit.buffer);
+    for (let i = 0; i < 8; i++) dvu.setUint32(i * 4, H[i]);
+    return hex(uit);
+  }
+  return { update, digest };
+}
+// Bestanden vanaf deze grootte worden in blokken gelezen, zodat er nooit een heel groot bestand in het geheugen staat
+const GROOT = 128 * 1024 * 1024, BLOK = 8 * 1024 * 1024;
+async function hashBestand(file, opVoortgang) {
+  if (file.size < GROOT) return Promise.race([sha256(file), state.stopBelofte]);
+  const h = sha256Stroom();
+  for (let pos = 0; pos < file.size; pos += BLOK) {
+    if (state.stop) return undefined;
+    h.update(new Uint8Array(await file.slice(pos, pos + BLOK).arrayBuffer()));
+    if (opVoortgang) opVoortgang(Math.min(pos + BLOK, file.size));
+  }
+  return h.digest();
 }
 
 function leesOpties() {
   return {
     hoofdletter: $("optHoofdletter").checked, extensie: $("optExtensie").checked, kopie: $("optKopie").checked,
-    systeem: $("optSysteem").checked, inhoud: $("optInhoud").checked
+    systeem: $("optSysteem").checked, inhoud: $("optInhoud").checked, uitsluiten: parseUitsluiten($("optUitsluiten").value)
+  };
+}
+// Oudere opmerkingenbestanden kennen niet alle instellingen; ontbrekende krijgen de standaardwaarde
+const STANDAARD_OPTIES = { hoofdletter: false, extensie: true, kopie: false, systeem: true, inhoud: true, uitsluiten: [] };
+function instellingenVerschillen(a, b) {
+  const n = o => { const x = { ...STANDAARD_OPTIES, ...(o || {}) }; x.uitsluiten = (Array.isArray(x.uitsluiten) ? x.uitsluiten : []).map(s => s.toLocaleLowerCase("nl-NL")).sort(); return JSON.stringify(Object.keys(STANDAARD_OPTIES).map(k => x[k])); };
+  return n(a) !== n(b);
+}
+
+/* ---------- Uitsluitlijst ---------- */
+function parseUitsluiten(tekst) {
+  return [...new Set(String(tekst || "").split(/[,;\n]+/).map(s => s.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "")).filter(Boolean))];
+}
+const globRe = (s, heel) => new RegExp("^" + s.split("*").map(d => d.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*") + (heel ? "$" : ""), "i");
+function maakUitsluiter(lijst) {
+  const ext = [], seg = [], pad = [];
+  for (const s of lijst || []) {
+    if (/^\*?\.[^/*]+$/.test(s)) ext.push(s.replace(/^\*/, "").toLocaleLowerCase("nl-NL"));
+    else if (s.includes("/")) pad.push(globRe(s + "/", false));
+    else seg.push(globRe(s, true));
+  }
+  if (!ext.length && !seg.length && !pad.length) return null;
+  return x => {
+    const mappen = x.pad.split("/").slice(1, -1);          // zonder de gekozen map zelf en zonder de bestandsnaam
+    if (ext.length) { const n = x.naam.toLocaleLowerCase("nl-NL"); if (ext.some(e => n.endsWith(e) && n.length > e.length)) return true; }
+    if (seg.length && mappen.some(m => seg.some(r => r.test(m)))) return true;
+    if (pad.length) { const rel = mappen.join("/") + "/"; if (pad.some(r => r.test(rel))) return true; }
+    return false;
   };
 }
 
@@ -218,8 +320,11 @@ function zetBezig(b) {
   $("stop").disabled = !b;
   $("opnieuw").disabled = b || !state.bestanden.length;
   $("kiezer").disabled = b;
+  $("kiezerLabel").classList.toggle("uit", b);
+  $("voortgangLaden").disabled = b;
   $("voortgang").style.display = b ? "block" : "none";
 }
+function startBezig() { state.stop = false; state.stopBelofte = new Promise(res => { state.stopSein = res; }); zetBezig(true); }
 function meldExport(tekst, fout) { const el = $("exportStatus"); el.textContent = tekst; el.style.color = fout ? "var(--rood)" : ""; }
 function markeerGewijzigd() { state.gewijzigd = true; }
 function toonMapNaam() {
@@ -227,22 +332,26 @@ function toonMapNaam() {
 }
 
 /* ---------- Hashen met beperkte parallelliteit ---------- */
-async function hashAlles(lijst) {
+async function hashAlles(lijst, label = "Hashen") {
   const N = lijst.length; let i = 0, klaar = 0;
   const totaalBytes = lijst.reduce((s, x) => s + x.grootte, 0); let bytes = 0;
-  $("voortgangBalk").max = Math.max(N, 1); $("voortgangBalk").value = 0;
+  $("voortgangBalk").max = Math.max(totaalBytes, 1); $("voortgangBalk").value = 0;
+  const toonVoortgang = (it, extra) => {
+    $("voortgangBalk").value = bytes + extra;
+    $("voortgangTekst").textContent = `${label}: ${klaar} / ${N} bestanden (${fmtGrootte(bytes + extra)} van ${fmtGrootte(totaalBytes)}) - ${it.pad}` +
+      (extra ? ` (${Math.round(extra / it.grootte * 100)}%)` : "");
+  };
   async function werker() {
     while (i < N && !state.stop) {
       const it = lijst[i++];
       try {
-        const h = await Promise.race([sha256(it.file), state.stopBelofte]);
+        const h = await hashBestand(it.file, n => toonVoortgang(it, n));
         if (state.stop) break;                       // afgebroken tijdens een groot bestand
         it.hash = h;
       }
       catch (e) { it.hash = null; it.fout = (e && (e.name || e.message)) || String(e); }
       klaar++; bytes += it.grootte;
-      $("voortgangBalk").value = klaar;
-      $("voortgangTekst").textContent = `Hashen: ${klaar} / ${N} bestanden (${fmtGrootte(bytes)} van ${fmtGrootte(totaalBytes)}) - ${it.pad}`;
+      toonVoortgang(it, 0);
     }
   }
   await Promise.all(Array.from({ length: Math.min(4, N) }, werker));
@@ -261,13 +370,15 @@ async function analyseer(bestanden, mapNaam, nieuweMap) {
   if (!bestanden.length || state.busy) return;
   if (!(window.crypto && crypto.subtle)) { alert("Deze browser ondersteunt geen hashfunctie (crypto.subtle). Gebruik een actuele versie van Edge of Chrome."); return; }
   const o = leesOpties();
-  state.stop = false; state.stopBelofte = new Promise(res => { state.stopSein = res; }); zetBezig(true);
+  startBezig();
   $("mapNaam").textContent = `Bezig met map: ${mapNaam} (${bestanden.length.toLocaleString("nl-NL")} bestanden)`;
   $("voortgangTekst").textContent = "Bestanden inventariseren...";
 
   const alle = bestanden.map(f => ({ file: f, naam: f.name, pad: f.webkitRelativePath || f.name, grootte: f.size, gewijzigd: f.lastModified, hash: undefined, fout: null }));
-  const items = o.systeem ? alle.filter(x => !isSysteem(x.naam)) : alle;
-  const overgeslagen = alle.length - items.length;
+  const naSysteem = o.systeem ? alle.filter(x => !isSysteem(x.naam)) : alle;
+  const uitsluiter = maakUitsluiter(o.uitsluiten);
+  const items = uitsluiter ? naSysteem.filter(x => !uitsluiter(x)) : naSysteem;
+  const overgeslagen = alle.length - naSysteem.length, uitgesloten = naSysteem.length - items.length;
 
   const opNaam = new Map();
   for (const it of items) {
@@ -329,11 +440,18 @@ async function analyseer(bestanden, mapNaam, nieuweMap) {
   const opPad = new Map(items.map(x => [x.pad, x]));
   const onleesbaar = items.filter(x => x.hash === null).sort((a, b) => a.pad.localeCompare(b.pad, "nl"));
   const leeg = items.filter(x => x.grootte === 0 && x.hash !== null).length;
+  // Overbodige opslag: ruimte die vrijkomt als van elke gevonden inhoud precies één exemplaar overblijft.
+  // Telt alle gehashte bestanden mee (identieke doublures, zelfde inhoud met andere naam en gelijke varianten binnen afwijkingen).
+  const perInhoud = new Map();
+  for (const x of items) if (x.hash) { const p = perInhoud.get(x.hash); if (p) p.n++; else perInhoud.set(x.hash, { n: 1, grootte: x.grootte }); }
+  let overbodig = 0, overbodigN = 0;
+  for (const p of perInhoud.values()) { overbodig += p.grootte * (p.n - 1); if (p.grootte) overbodigN += p.n - 1; }
 
   // Bestaande invoer vastleggen voordat de oude resultaten worden vervangen
   const snapshot = (!nieuweMap && state.res) ? notitieLijst() : null;
 
-  state.res = { o, totaal: items.length, overgeslagen, leeg, gehasht: teHashen.length, naamGroepen: naamGroepen.length, ident, afw, inh, onleesbaar, perPad, perId, opPad, hashSets };
+  state.res = { o, totaal: items.length, overgeslagen, uitgesloten, leeg, gehasht: teHashen.length, naamGroepen: naamGroepen.length, ident, afw, inh, onleesbaar, perPad, perId, opPad, hashSets,
+    overbodig, overbodigN, alleOpPad: new Map(alle.map(x => [x.pad, x])) };
   state.bestanden = bestanden; state.mapNaam = mapNaam;
   state.diffs = new Map();
   zetBezig(false); toonMapNaam();
@@ -342,6 +460,7 @@ async function analyseer(bestanden, mapNaam, nieuweMap) {
   if (nieuweMap) {
     state.notities = new Map(); state.acties = new Map(); state.identAlgemeen = ""; state.identEen = true;
     state.nietGekoppeld = []; state.open = new Map(); state.gewijzigd = false;
+    state.hercontrole = null; state.hercontroleBron = null;
   } else {
     let k = { exact: 0, deels: 0, niet: [] };
     if (snapshot) { state.notities = new Map(); k = koppelNotities([...snapshot, ...state.nietGekoppeld]); state.nietGekoppeld = k.niet; }
@@ -358,6 +477,8 @@ async function analyseer(bestanden, mapNaam, nieuweMap) {
   if (state.tab === "inh" && !o.inhoud) state.tab = "afw";
   if (state.tab === "fout" && !onleesbaar.length) state.tab = "afw";
   if (state.tab === "nietgek" && !state.nietGekoppeld.length) state.tab = "afw";
+  if (state.hercontroleBron) await voerHercontroleUit(state.hercontroleBron);
+  if (state.tab === "herc" && !state.hercontrole) state.tab = "afw";
   toon();
   meldExport(melding, fout);
 }
@@ -437,6 +558,104 @@ function actieGeldig(pad) {
   return !!(a && x && x.hash && x.hash === a.hash && isDoublure(pad));
 }
 
+/* ---------- Hercontrole ---------- */
+// Toetst de keuzes uit een opmerkingenbestand aan de huidige map: is wat verwijderd moest worden weg, en staat wat
+// behouden moest blijven er nog? Systeembestanden en uitgesloten bestanden tellen ook mee als aanwezig.
+async function voerHercontroleUit(bron) {
+  const r = state.res;
+  const acties = (bron.acties || []).filter(a => a && typeof a.pad === "string" && (a.actie === "behouden" || a.actie === "verwijderen"));
+  if (!acties.length) { state.hercontrole = null; return; }
+  const info = { map: bron.map, opgeslagen: bron.opgeslagen, versie: bron.versie };
+  if (!acties.some(a => r.alleOpPad.has(a.pad))) {
+    state.hercontrole = { info, geenOverlap: true, rijen: [], telling: { problemen: 1 } };
+    return;
+  }
+  const alle = [...r.alleOpPad.values()];
+  const perHash = new Map();
+  for (const a of acties) if (a.hash) { if (!perHash.has(a.hash)) perHash.set(a.hash, []); perHash.get(a.hash).push(a); }
+  // 1. aanwezige bestanden met een keuze die in deze analyse niet zijn gehasht
+  const teHashen = new Set(acties.map(a => r.alleOpPad.get(a.pad)).filter(x => x && x.hash === undefined));
+  // 2. per inhoud met een keuze 'behouden': staat die inhoud nog ergens? Daarvoor bestanden met dezelfde grootte hashen
+  //    (de grootte staat vanaf v9 in het opmerkingenbestand)
+  const grootteVan = new Map();
+  for (const [h, lijst] of perHash) {
+    if (!lijst.some(a => a.actie === "behouden")) continue;
+    const g = lijst.map(a => a.grootte).find(v => typeof v === "number");
+    if (g === undefined) continue;
+    grootteVan.set(h, g);
+    if (!alle.some(x => x.hash === h)) for (const x of alle) if (x.grootte === g && x.hash === undefined) teHashen.add(x);
+  }
+  let afgebroken = false;
+  if (teHashen.size) {
+    startBezig();
+    await hashAlles([...teHashen], "Hercontrole");
+    afgebroken = state.stop;
+    zetBezig(false); toonMapNaam();
+  }
+  const nu = new Map();
+  for (const x of alle) if (x.hash) { if (!nu.has(x.hash)) nu.set(x.hash, []); nu.get(x.hash).push(x); }
+
+  const t = { verw: 0, verwUit: 0, verwNiet: 0, beh: 0, behOk: 0, behWeg: 0, verloren: 0, onbekend: 0, problemen: 0 };
+  const verloren = new Set(), rijen = [];
+  for (const a of acties) {
+    const x = r.alleOpPad.get(a.pad);
+    const elders = a.hash ? (nu.get(a.hash) || []).filter(y => y.pad !== a.pad) : [];
+    let status, soort, toel = "";
+    if (a.actie === "verwijderen") {
+      t.verw++;
+      if (!x) { status = "Uitgevoerd"; soort = "ok"; t.verwUit++; toel = elders.length ? "Inhoud blijft behouden in " + elders[0].pad + (elders.length > 1 ? ` (en ${elders.length - 1} andere)` : "") + "." : ""; }
+      else {
+        t.verwNiet++; status = "Niet uitgevoerd"; soort = "let";
+        toel = x.hash === undefined ? "Bestand staat er nog; de inhoud is niet gecontroleerd (hercontrole afgebroken)."
+          : x.hash === null ? "Bestand staat er nog, maar is niet leesbaar."
+          : !a.hash || x.hash === a.hash ? "Bestand staat er nog, met dezelfde inhoud."
+          : "Bestand staat er nog, maar de inhoud is na het voorstel gewijzigd. Beoordeel het opnieuw.";
+      }
+    } else {
+      t.beh++;
+      if (!x) {
+        t.behWeg++; status = "Ontbreekt";
+        if (elders.length) { soort = "let"; toel = `Staat niet meer op deze plek. De inhoud staat nog in ${elders[0].pad}${elders.length > 1 ? ` (en ${elders.length - 1} andere)` : ""}; mogelijk verplaatst of hernoemd.`; }
+        else if (a.hash && grootteVan.has(a.hash) && !afgebroken) { soort = "fout"; verloren.add(a.hash); toel = "Dit bestand moest behouden blijven, maar de inhoud staat nergens meer in de map. Herstel het, bijvoorbeeld uit de prullenbak of een back-up."; }
+        else { soort = "fout"; t.onbekend++; toel = afgebroken ? "Dit bestand moest behouden blijven. Of de inhoud elders staat, is niet gecontroleerd (hercontrole afgebroken)."
+          : "Dit bestand moest behouden blijven. Of de inhoud elders in de map staat, is niet te controleren: het opmerkingenbestand is gemaakt met een oudere versie en bevat geen bestandsgrootte."; }
+      } else if (x.hash === undefined) { status = "Aanwezig"; soort = "let"; toel = "De inhoud is niet gecontroleerd (hercontrole afgebroken)."; }
+      else if (x.hash === null) { status = "Aanwezig"; soort = "let"; toel = "Bestand is niet leesbaar."; }
+      else { status = "Aanwezig"; soort = "ok"; t.behOk++; if (a.hash && x.hash !== a.hash) toel = "De inhoud is na het voorstel gewijzigd."; }
+    }
+    if (soort !== "ok") t.problemen++;
+    rijen.push({ pad: a.pad, actie: a.actie, status, soort, toel });
+  }
+  t.verloren = verloren.size;
+  const orde = { fout: 0, let: 1, ok: 2 };
+  rijen.sort((a, b) => orde[a.soort] - orde[b.soort] || a.pad.localeCompare(b.pad, "nl"));
+  state.hercontrole = { info, rijen, telling: t, afgebroken };
+}
+function hercontroleBronTekst(h) {
+  const i = h.info, d = i.opgeslagen ? Date.parse(i.opgeslagen) : NaN;
+  return `Opmerkingenbestand van map "${i.map || "?"}"${isNaN(d) ? "" : ", opgeslagen op " + fmtDatum(d)} (${i.versie || "v8 of ouder"}), getoetst aan de huidige inhoud van map "${state.mapNaam}".`;
+}
+function hercontroleSamenvatting(h) {
+  const t = h.telling;
+  return [
+    ["Voorgesteld te verwijderen", `${t.verw} bestand(en): ${t.verwUit} uitgevoerd, ${t.verwNiet} niet uitgevoerd`, t.verwNiet ? "oranje" : "groen"],
+    ["Voorgesteld te behouden", `${t.beh} bestand(en): ${t.behOk} aanwezig, ${t.behWeg} ontbreekt`, t.behWeg ? "rood" : "groen"],
+    ...(t.verloren ? [["Let op: inhoud verdwenen", `van ${t.verloren} inhoud(en) die behouden moest(en) blijven staat geen exemplaar meer in de map`, "rood"]] : []),
+    ...(t.onbekend ? [["Niet te controleren", `${t.onbekend} ontbrekend(e) bestand(en) waarvan niet is na te gaan of de inhoud elders staat`, "rood"]] : []),
+    ...(h.afgebroken ? [["Afgebroken", "de hercontrole is afgebroken; niet alle bestanden zijn gecontroleerd", "oranje"]] : [])
+  ];
+}
+function hercontroleHtml(match) {
+  const h = state.hercontrole, bron = `<div class="diffkop">${esc(hercontroleBronTekst(h))}</div>`;
+  if (h.geenOverlap) return bron + `<div class="diffwaarsch"><b>Geen enkel bestand uit het opmerkingenbestand is in deze map teruggevonden.</b> Kies dezelfde map als waarvoor het opmerkingenbestand is gemaakt en laad het opnieuw.</div>`;
+  const kaarten = `<div class="kaarten">${hercontroleSamenvatting(h).map(([l, w, c]) => `<div class="kaart ${c}"><div class="lbl"><b>${esc(l)}</b></div><div>${esc(w)}</div></div>`).join("")}</div>`;
+  const z = h.rijen.filter(x => match({ pad: x.pad }));
+  return bron + kaarten + (!z.length ? `<div class="leeg">Geen resultaten voor dit filter.</div>` :
+    `<table><thead><tr><th>Pad</th><th style="width:120px">Voorstel</th><th style="width:140px">Status</th><th style="width:40%">Toelichting</th></tr></thead><tbody>` +
+    z.map(x => `<tr class="hc-${x.soort}"><td class="pad">${state.res.alleOpPad.has(x.pad) ? padLink(state.res.alleOpPad.get(x.pad)) : esc(x.pad)}</td><td>${esc(actieTekst(x.actie))}</td><td class="hc-status">${esc(x.status)}</td><td>${esc(x.toel)}</td></tr>`).join("") +
+    `</tbody></table>`);
+}
+
 /* ---------- Groephulpen ---------- */
 const vl = (g, x) => g.letters.get(x.pad) || "?";
 const ookIn = (g, x) => (state.res.perPad.get(x.pad) || []).filter(id => id !== g.id);
@@ -509,20 +728,21 @@ function toon() {
 
 function toonKaarten() {
   const r = state.res;
-  const overbodig = r.ident.reduce((s, g) => s + g.items[0].grootte * (g.items.length - 1), 0);
   const vv = voorgesteldVerwijderen();
-  const extra = [r.overgeslagen ? `${r.overgeslagen} systeembestanden overgeslagen` : "", r.o.inhoud && r.leeg ? `${r.leeg} lege bestanden niet op inhoud vergeleken` : ""].filter(Boolean).join("; ");
+  const extra = [r.overgeslagen ? `${r.overgeslagen} systeembestanden overgeslagen` : "", r.uitgesloten ? `${r.uitgesloten} uitgesloten via uitsluitlijst` : "",
+    r.o.inhoud && r.leeg ? `${r.leeg} lege bestanden niet op inhoud vergeleken` : ""].filter(Boolean).join("; ");
   const kaarten = [
     ["", r.totaal, "bestanden geanalyseerd" + (extra ? ` (${extra})` : "")],
     ["", r.naamGroepen, "namen die meer dan eens voorkomen"],
     ["rood", r.afw.length, "zelfde naam, afwijkende inhoud (handmatig beoordelen)"],
-    ["groen", r.ident.length, `identieke doublures (${r.ident.reduce((s, g) => s + g.items.length, 0)} bestanden, ${fmtGrootte(overbodig)} overbodig)`]
+    ["groen", r.ident.length, `identieke doublures (${r.ident.reduce((s, g) => s + g.items.length, 0)} bestanden)`]
   ];
   if (r.o.inhoud) kaarten.push(["oranje", r.inh.length, "zelfde inhoud, andere naam"]);
+  kaarten.push(["blauw", fmtGrootte(r.overbodig), `overbodige opslag (${r.overbodigN} bestanden te veel als van elke inhoud één exemplaar blijft)`]);
   if (r.onleesbaar.length) kaarten.push(["rood", r.onleesbaar.length, "bestanden niet leesbaar (zie tab Niet leesbaar)"]);
   if (vv.n) kaarten.push([vv.alles ? "rood" : "blauw", vv.n, `voorgesteld te verwijderen (${fmtGrootte(vv.bytes)})` + (vv.alles ? `; let op: van ${vv.alles} inhoud(en) staan alle exemplaren op verwijderen` : "")]);
   $("kaarten").innerHTML = kaarten.map(([c, n, l]) =>
-    `<div class="kaart ${c}"><div class="getal">${n.toLocaleString("nl-NL")}</div><div class="lbl">${esc(l)}</div></div>`).join("");
+    `<div class="kaart ${c}"><div class="getal">${esc(typeof n === "number" ? n.toLocaleString("nl-NL") : n)}</div><div class="lbl">${esc(l)}</div></div>`).join("");
 }
 
 function toonTabs() {
@@ -531,6 +751,7 @@ function toonTabs() {
   if (r.o.inhoud) tabs.push(["inh", `Zelfde inhoud, andere naam (${r.inh.length})`]);
   if (r.onleesbaar.length) tabs.push(["fout", `Niet leesbaar (${r.onleesbaar.length})`]);
   if (state.nietGekoppeld.length) tabs.push(["nietgek", `Niet gekoppelde opmerkingen (${state.nietGekoppeld.length})`, "let"]);
+  if (state.hercontrole) tabs.push(["herc", `Hercontrole (${state.hercontrole.rijen.length})`, state.hercontrole.telling.problemen ? "let" : ""]);
   $("tabs").innerHTML = tabs.map(([k, l, c]) => `<button class="tab ${c || ""} ${state.tab === k ? "actief" : ""}" data-tab="${k}">${esc(l)}</button>`).join("");
 }
 
@@ -613,6 +834,7 @@ function toonLijst() {
   const match = x => !f || x.pad.toLocaleLowerCase("nl-NL").includes(f);
   const leeg = `<div class="leeg">Geen resultaten${f ? " voor dit filter" : ""}.</div>`;
 
+  if (state.tab === "herc") { $("lijst").innerHTML = hercontroleHtml(match); return; }
   if (state.tab === "nietgek") {
     $("lijst").innerHTML = `<div class="toel" style="padding-left:0">Deze opmerkingen horen bij groepen die na een nieuwe analyse of het laden van een opmerkingenbestand niet meer bestaan (bijv. door gewijzigde instellingen of bestanden). Ze komen niet in het rapport, maar worden wel bewaard bij Opmerkingen opslaan. Kopieer ze zo nodig naar de juiste groep en verwijder ze hier.</div>
       <table><thead><tr><th style="width:190px">Categorie</th><th>Bestanden</th><th style="width:34%">Opmerking</th><th style="width:110px"></th></tr></thead><tbody>` +
@@ -1019,7 +1241,7 @@ function downloadBlob(blob, naam) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 function openBestand(pad) {
-  const x = state.res && state.res.opPad.get(pad); if (!x) return;
+  const x = state.res && (state.res.opPad.get(pad) || state.res.alleOpPad.get(pad)); if (!x) return;
   const type = BEKIJK[splitExt(x.naam)[1].toLowerCase()];
   if (type) {
     const url = URL.createObjectURL(new Blob([x.file], { type }));
@@ -1042,12 +1264,9 @@ function instellingenLijst(o) {
     ["Extensie meegenomen in naamvergelijking", jn(o.extensie)],
     ["Kopie-aanduidingen genegeerd", jn(o.kopie)],
     ["Systeem- en tijdelijke bestanden overgeslagen", jn(o.systeem)],
-    ["Zelfde inhoud met andere naam gezocht (lege bestanden uitgezonderd)", jn(o.inhoud)]
+    ["Zelfde inhoud met andere naam gezocht (lege bestanden uitgezonderd)", jn(o.inhoud)],
+    ["Uitsluitlijst", o.uitsluiten && o.uitsluiten.length ? o.uitsluiten.join(", ") : "geen"]
   ];
-}
-function overbodigeOpslag(r) {
-  let s = 0; for (const m of r.hashSets.values()) { const v = [...m.values()]; s += v[0].grootte * (v.length - 1); }
-  return s;
 }
 const actieTekst = a => a === "verwijderen" ? "Verwijderen" : a === "behouden" ? "Behouden" : "";
 function kenmerk(g, x) {
@@ -1128,19 +1347,27 @@ function maakXlsx(r, meta) {
   if (state.nietGekoppeld.length) bladen.push({ naam: "Niet gekoppelde opmerkingen", xml: sheetXml(
     [{ kop: "Categorie", breedte: 30 }, { kop: "Bestanden", breedte: 90 }, { kop: "Opmerking", breedte: 60 }],
     state.nietGekoppeld.map(n => [CATNAAM[n.categorie] || "Onbekend", n.paden.join("\n"), n.opmerking])) });
+  const h = state.hercontrole;
+  if (h && !h.geenOverlap) bladen.push({ naam: "Hercontrole", xml: sheetXml(
+    [{ kop: "Pad", breedte: 80 }, { kop: "Voorstel", breedte: 14 }, { kop: "Status", breedte: 18 }, { kop: "Toelichting", breedte: 80 }],
+    h.rijen.map(x => [x.pad, actieTekst(x.actie), x.status, x.toel])) });
   const vv = voorgesteldVerwijderen();
   const toel = [
+    ["Tool", `Doublurecontrole ${VERSIE}`],
     ["Map", meta.map], ["Uitgevoerd", meta.datum],
     ["Bestanden geanalyseerd", r.totaal], ["Systeembestanden overgeslagen", r.overgeslagen],
+    ["Uitgesloten via uitsluitlijst", r.uitgesloten],
     ["Lege bestanden (0 bytes)", r.leeg], ["Bestanden gehasht", r.gehasht],
+    ["Groepen zelfde naam, afwijkende inhoud", r.afw.length],
     ["Groepen identieke doublures", r.ident.length],
     ...(r.o.inhoud ? [["Groepen zelfde inhoud, andere naam", r.inh.length]] : []),
-    ["Groepen zelfde naam, afwijkende inhoud", r.afw.length],
     ["Niet leesbare bestanden", r.onleesbaar.length],
-    ["Overbodige opslag identieke bestanden (bytes)", overbodigeOpslag(r)],
+    ["Overbodige opslag (bytes; van elke inhoud één exemplaar behouden)", r.overbodig],
     ["Voorgesteld te verwijderen (bestanden)", vv.n],
     ...(vv.alles ? [["Let op: inhoud(en) waarvan alle exemplaren op verwijderen staan", vv.alles]] : []),
     ...(state.identEen && state.identAlgemeen ? [["Opmerking identieke doublures (algemeen)", state.identAlgemeen]] : []),
+    ...(h ? [["Hercontrole", h.geenOverlap ? "geen bestanden uit het opmerkingenbestand teruggevonden" : hercontroleBronTekst(h)],
+      ...(h.geenOverlap ? [] : hercontroleSamenvatting(h).map(([a, b]) => ["Hercontrole: " + a, b]))] : []),
     ...instellingenLijst(r.o),
     ["Methode", "Groeperen op bestandsnaam volgens bovenstaande instellingen; daarna SHA-256-hash per bestand. Zelfde variantletter binnen een groep = binair identiek. Voor 'zelfde inhoud, andere naam' worden alleen niet-lege bestanden met een gelijke grootte gehasht."],
     ["Let op", "Een bestand kan in meer dan één groep voorkomen (kolom 'Ook in groep'). Behoud per inhoud ten minste één exemplaar."]
@@ -1200,18 +1427,19 @@ function maakDocx(r, meta) {
   const datumCel = (g, x) => fmtDatum(x.gewijzigd) + (isNieuwste(g, x) ? " (nieuwste)" : "");
 
   d.push(wP(`Rapport doublurecontrole${meta.map ? ": " + meta.map : ""}`, "Title"));
-  d.push(wP(`Opgesteld op ${meta.datum}.`));
+  d.push(wP(`Opgesteld op ${meta.datum} met Doublurecontrole ${VERSIE}.`));
 
   kop1("Samenvatting");
   d.push(wTabel([5200, 9370], null, [
     [lbl("Map"), meta.map],
-    [lbl("Bestanden gecontroleerd"), String(r.totaal)],
+    [lbl("Bestanden gecontroleerd"), String(r.totaal) + (r.uitgesloten ? ` (${r.uitgesloten} uitgesloten via uitsluitlijst)` : "")],
     [lbl("Zelfde naam, afwijkende inhoud"), `${r.afw.length} groepen (${aantalBest(r.afw)} bestanden)`],
     [lbl("Identieke doublures"), `${r.ident.length} groepen (${aantalBest(r.ident)} bestanden)`],
     ...(r.o.inhoud ? [[lbl("Zelfde inhoud, andere naam"), `${r.inh.length} groepen (${aantalBest(r.inh)} bestanden)`]] : []),
     [lbl("Niet leesbare bestanden"), String(r.onleesbaar.length)],
-    [lbl("Overbodige opslag door identieke bestanden"), fmtGrootte(overbodigeOpslag(r))],
-    ...(vv.n ? [[lbl("Voorgesteld te verwijderen"), `${vv.n} bestanden (${fmtGrootte(vv.bytes)})`]] : [])
+    [lbl("Overbodige opslag (van elke inhoud één exemplaar behouden)"), fmtGrootte(r.overbodig)],
+    ...(vv.n ? [[lbl("Voorgesteld te verwijderen"), `${vv.n} bestanden (${fmtGrootte(vv.bytes)})`]] : []),
+    ...(state.hercontrole && !state.hercontrole.geenOverlap ? [[lbl("Hercontrole"), `${state.hercontrole.telling.problemen} aandachtspunt(en); zie hoofdstuk Hercontrole`]] : [])
   ]));
 
   kop1("Leeswijzer en gevraagde actie");
@@ -1229,7 +1457,7 @@ function maakDocx(r, meta) {
   if (!r.afw.length) d.push(wP("Niet aangetroffen."));
   for (const g of r.afw) {
     d.push(wP(`${g.id}  ${g.items[0].naam} (${g.items.length} bestanden, ${g.varianten.size} varianten)`, "Heading2"));
-    d.push(wTabel([900, 5770, 1100, 1800, 1800, 1000, 2200], ["Variant", "Pad", "Grootte", "Gewijzigd", "SHA-256 (verkort)", "Ook in", "Actie"],
+    d.push(wTabel([900, 5770, 1100, 1800, 1800, 1000, 2200], ["Variant", "Pad", "Grootte", "Gewijzigd", "SHA-256 (verkort)", "Ook in", "Actie (voorstel)"],
       gesorteerd(g).map(x => [
         { t: vl(g, x), vet: true }, x.pad, fmtGrootte(x.grootte), datumCel(g, x),
         x.hash ? { t: x.hash.slice(0, 16), font: "Consolas", sz: 16 } : { t: "Leesfout", vet: true, kleur: "B42318" },
@@ -1264,14 +1492,25 @@ function maakDocx(r, meta) {
       r.onleesbaar.map(x => [x.pad, fmtGrootte(x.grootte), fmtDatum(x.gewijzigd), x.fout || "", state.notities.get("fout:" + x.pad) || ""])));
   }
 
+  const hc = state.hercontrole;
+  if (hc && !hc.geenOverlap) {
+    kop1("Hercontrole");
+    d.push(wP(hercontroleBronTekst(hc)));
+    d.push(wTabel([5200, 9370], null, hercontroleSamenvatting(hc).map(([a, b]) => [lbl(a), b])));
+    d.push(wP(""));
+    const KL = { fout: "B42318", let: "B54708", ok: "1D7A3E" };
+    d.push(wTabel([6170, 1600, 1800, 5000], ["Pad", "Voorstel", "Status", "Toelichting"],
+      hc.rijen.map(x => [x.pad, actieTekst(x.actie), { t: x.status, vet: true, kleur: KL[x.soort] }, x.toel])));
+  }
+
   kop1("Werkwijze en instellingen");
-  d.push(wP("Alle bestanden in de map en submappen zijn gegroepeerd op bestandsnaam. Van de bestanden is een SHA-256-hash (digitale vingerafdruk) berekend; bestanden met dezelfde hash zijn exact gelijk. Een afwijkende hash betekent alleen dat de bestanden niet byte-voor-byte gelijk zijn; ook zonder inhoudelijke wijziging kan de hash verschillen, bijvoorbeeld na opnieuw opslaan. Lege bestanden (0 bytes) zijn niet op inhoud met elkaar vergeleken."));
+  d.push(wP("Alle bestanden in de map en submappen zijn gegroepeerd op bestandsnaam. Van de bestanden is een SHA-256-hash (digitale vingerafdruk) berekend; bestanden met dezelfde hash zijn exact gelijk. Een afwijkende hash betekent alleen dat de bestanden niet byte-voor-byte gelijk zijn; ook zonder inhoudelijke wijziging kan de hash verschillen, bijvoorbeeld na opnieuw opslaan. Lege bestanden (0 bytes) zijn niet op inhoud met elkaar vergeleken. De overbodige opslag is de ruimte die vrijkomt als van elke gevonden inhoud precies één exemplaar overblijft."));
   d.push(wTabel([5200, 9370], null, instellingenLijst(r.o).map(([a, b]) => [lbl(a), b])));
 
   const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
   const vRun = t => `<w:r><w:rPr><w:color w:val="52606D"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">${xe(t)}</w:t></w:r>`;
   const veld = instr => `<w:fldSimple w:instr=" ${instr} ">${vRun("1")}</w:fldSimple>`;
-  const footer = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ${W}><w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="14570"/></w:tabs></w:pPr>${vRun(`Rapport doublurecontrole${meta.map ? " – " + meta.map : ""} – ${meta.datum}`)}<w:r><w:tab/></w:r>${vRun("Pagina ")}${veld("PAGE")}${vRun(" van ")}${veld("NUMPAGES")}</w:p></w:ftr>`;
+  const footer = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ${W}><w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="14570"/></w:tabs></w:pPr>${vRun(`Rapport doublurecontrole${meta.map ? " – " + meta.map : ""} – ${meta.datum} – ${VERSIE}`)}<w:r><w:tab/></w:r>${vRun("Pagina ")}${veld("PAGE")}${vRun(" van ")}${veld("NUMPAGES")}</w:p></w:ftr>`;
   const document = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${W}><w:body>${d.join("")}<w:sectPr><w:footerReference w:type="default" r:id="rId2"/><w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
   const kopStijl = (id, naam, lvl, sz) => `<w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${naam}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="120"/><w:outlineLvl w:val="${lvl}"/></w:pPr><w:rPr><w:b/><w:color w:val="0B4F8A"/><w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/></w:rPr></w:style>`;
   const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Arial" w:cs="Arial"/><w:sz w:val="18"/><w:szCs w:val="18"/><w:lang w:val="nl-NL"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="60" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style><w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="120"/></w:pPr><w:rPr><w:b/><w:color w:val="0B4F8A"/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr></w:style>${kopStijl("Heading1", "heading 1", 0, 24)}${kopStijl("Heading2", "heading 2", 1, 20)}</w:styles>`;
@@ -1322,9 +1561,12 @@ async function exporteer(soort) {
 /* ---------- Opmerkingen opslaan en laden (.json) ---------- */
 async function voortgangOpslaan() {
   const r = state.res; if (!r) { meldExport("Voer eerst een analyse uit.", true); return; }
-  const acties = [...state.acties].map(([pad, a]) => ({ pad, actie: a.actie, hash: a.hash }));
+  const acties = [...state.acties].map(([pad, a]) => {
+    const x = r.opPad.get(pad);
+    return { pad, actie: a.actie, hash: a.hash, grootte: x ? x.grootte : a.grootte };
+  });
   const data = {
-    tool: "Doublurecontrole", formaat: 2, map: state.mapNaam, opgeslagen: new Date().toISOString(), instellingen: r.o,
+    tool: "Doublurecontrole", versie: VERSIE, formaat: 3, map: state.mapNaam, opgeslagen: new Date().toISOString(), instellingen: r.o,
     identiekEenOpmerking: state.identEen, identiekAlgemeneOpmerking: state.identAlgemeen,
     groepen: notitieLijst(), acties, nietGekoppeld: state.nietGekoppeld
   };
@@ -1335,6 +1577,7 @@ async function voortgangOpslaan() {
 
 async function voortgangLaden(file) {
   const r = state.res; if (!r) { meldExport("Analyseer eerst de map en laad daarna de opmerkingen.", true); return; }
+  if (state.busy) return;
   let data;
   try { data = JSON.parse(await file.text()); } catch (e) { meldExport("Het gekozen bestand is geen geldig opmerkingenbestand.", true); return; }
   if (!data || data.tool !== "Doublurecontrole") { meldExport("Het gekozen bestand is geen opmerkingenbestand van deze tool.", true); return; }
@@ -1352,19 +1595,24 @@ async function voortgangLaden(file) {
     // let op: x.hash wordt hier gezet zodat de keuze aan de huidige inhoud is gebonden
     if (ok) { state.acties.set(a.pad, { actie: a.actie, hash: x.hash }); aOk++; } else aSkip++;
   }
+  state.hercontroleBron = { acties: data.acties || [], map: data.map, opgeslagen: data.opgeslagen, versie: data.versie };
+  await voerHercontroleUit(state.hercontroleBron);
+  const hc = state.hercontrole;
+  if (hc && (aSkip || hc.geenOverlap)) state.tab = "herc";
   if (typeof data.identiekEenOpmerking === "boolean") state.identEen = data.identiekEenOpmerking;
   if (data.identiekAlgemeneOpmerking) state.identAlgemeen = state.identAlgemeen && state.identAlgemeen !== data.identiekAlgemeneOpmerking && !state.identAlgemeen.includes(data.identiekAlgemeneOpmerking) ? state.identAlgemeen + "\n" + data.identiekAlgemeneOpmerking : data.identiekAlgemeneOpmerking;
 
-  const verschilInst = data.instellingen && JSON.stringify(data.instellingen) !== JSON.stringify(r.o);
+  const verschilInst = data.instellingen && instellingenVerschillen(data.instellingen, r.o);
   markeerGewijzigd();
   toon();
   meldExport(`Geladen: ${k.exact} opmerking(en) exact gekoppeld` +
     (k.deels ? `, ${k.deels} gekoppeld aan een gewijzigde groep (controleer deze)` : "") +
     (k.niet.length ? `, ${k.niet.length} niet te koppelen (zie tab Niet gekoppelde opmerkingen)` : "") +
-    `; ${aOk} keuze(s) overgenomen` + (aSkip ? `, ${aSkip} keuze(s) overgeslagen omdat het bestand ontbreekt, gewijzigd is of geen doublure meer is` : "") + "." +
+    `; ${aOk} keuze(s) overgenomen` + (aSkip ? `, ${aSkip} keuze(s) overgeslagen omdat het bestand ontbreekt, gewijzigd is of geen doublure meer is (zie tab Hercontrole)` : "") + "." +
+    (hc && hc.telling.problemen ? ` Hercontrole: ${hc.geenOverlap ? "geen bestanden uit het opmerkingenbestand teruggevonden" : hc.telling.problemen + " aandachtspunt(en)"}.` : "") +
     (data.map && data.map !== state.mapNaam ? ` Let op: opgeslagen bij map "${data.map}", huidige map is "${state.mapNaam}".` : "") +
     (verschilInst ? " Let op: de opgeslagen analyse-instellingen wijken af van de huidige; daardoor kunnen groepen anders zijn samengesteld." : ""),
-    !!(k.deels || k.niet.length || aSkip || verschilInst));
+    !!(k.deels || k.niet.length || aSkip || verschilInst || (hc && hc.telling.problemen)));
 }
 
 /* ---------- Events ---------- */
@@ -1381,6 +1629,15 @@ $("kiezer").addEventListener("change", e => {
   analyseer(bestanden, map, nieuweMap);
 });
 $("opnieuw").onclick = () => analyseer(state.bestanden, state.mapNaam, false);
+// Het label werkt als knop: ook met Enter of spatie te bedienen
+$("kiezerLabel").addEventListener("keydown", e => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  e.preventDefault(); if (!$("kiezer").disabled) $("kiezer").click();
+});
+// Uitsluitlijst onthouden in deze browser
+const UITSLUIT_SLEUTEL = "doublurecontrole.uitsluitlijst";
+try { const v = localStorage.getItem(UITSLUIT_SLEUTEL); if (v) $("optUitsluiten").value = v; } catch (e) {}
+$("optUitsluiten").addEventListener("input", e => { try { localStorage.setItem(UITSLUIT_SLEUTEL, e.target.value); } catch (err) {} });
 $("stop").onclick = () => { state.stop = true; if (state.stopSein) state.stopSein(); };
 $("filter").addEventListener("input", () => state.res && toonLijst());
 $("tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (!b) return; state.tab = b.dataset.tab; toonTabs(); toonLijst(); });
