@@ -37,6 +37,8 @@ Laat de mapbeheerders de voorgestelde acties uitvoeren. Kies daarna dezelfde map
 
 De hercontrole komt ook in het Word-rapport en de Excel-export. Wil je alleen verder werken met je opmerkingen, zet het vinkje dan uit. Je kunt het later alsnog aanzetten.
 
+> **Let op:** kies na het opschonen de map opnieuw via **Map kiezen en analyseren**. De knop **Opnieuw analyseren** gebruikt de bestandslijst van het moment waarop de map werd gekozen. Verwijderde bestanden staan daarin nog en geven dan een leesfout. De tool waarschuwt als dat gebeurt.
+
 ### Uitsluitlijst
 
 Gescheiden door komma of puntkomma; hoofdletters maken niet uit.
@@ -68,12 +70,34 @@ Aanbevolen: een actuele versie van **Microsoft Edge** of **Google Chrome**.
 - **Oudere formaten.** Inhoudelijk vergelijken werkt niet voor .doc, .xls, .ppt en pdf; open die bestanden via de paden. Ook bestanden met een wachtwoord kunnen niet worden vergeleken.
 - **Grote bestanden.** Bestanden vanaf 128 MB worden in delen gehasht. Het geheugengebruik blijft daardoor laag, maar ze worden wel langzamer verwerkt.
 - **OneDrive.** Bestanden die alleen online staan, downloadt OneDrive eerst naar de pc zodra de tool ze leest.
+- **Opnieuw analyseren.** Gebruikt de bestandslijst van het moment van kiezen; zie de waarschuwing bij de hercontrole.
 - **Opmerkingenbestanden van v8.** Die bevatten geen bestandsgrootte. Bij de hercontrole kan de tool daardoor niet altijd nagaan of de inhoud van een ontbrekend bestand elders nog staat.
+
+## Testen
+
+In de map [`tests/`](tests) staat een testsuite die de tool in een echte browser (Chromium) doorloopt. Hij controleert onder andere de analyse, de Word-vergelijking, de exports, het opmerkingenbestand, de hercontrole en de snelheid bij 3000 groepen. De tests maken hun testmappen aan in een tijdelijke map en ruimen die daarna op.
+
+Eenmalig installeren (Node.js nodig):
+
+```bash
+cd tests
+npm install
+npx playwright install chromium
+```
+
+Tests draaien:
+
+```bash
+npm test
+```
+
+Met `npm test -- --groot` loopt ook een test met twee bestanden van 130 MB mee. Die controleert het hashen in blokken en duurt wat langer. Draai de tests na elke wijziging aan `index.html`.
 
 ## Versies
 
 | Versie | Wijzigingen |
 |---|---|
+| **v9.3** | Verbeteringen na een code-audit: waarschuwing als "Opnieuw analyseren" een verouderde bestandslijst gebruikt (ook in de hercontrole), groepen worden pas opgebouwd bij uitklappen en het filter wacht tot je stopt met typen (veel sneller bij grote mappen), kopie-aanduidingen van de Mac en `(1).txt` correct, LibreOffice-vergrendelbestanden overgeslagen, tegels met het toetsenbord te bedienen, getallen in Excel als getal, en een testsuite in `tests/`. |
 | **v9.2** | Compactere indeling: instellingen klappen in na de analyse, samenvatting op één rij en een vast blok met samenvatting, tabbladen en werkbalk dat bij het scrollen in beeld blijft. Klik op een tegel in de samenvatting om naar het bijbehorende tabblad te gaan. |
 | **v9.1** | Opmerkingenbestand bewaart ook uit- en ingeklapte groepen en het actieve tabblad. Afwijkende instellingen zijn met één knop over te nemen. Vinkje om de hercontrole wel of niet uit te voeren. |
 | **v9** | Hercontrole na het opschonen, uitsluitlijst, grote bestanden in delen hashen, versienummer in rapport/Excel/opmerkingenbestand, één berekening voor overbodige opslag, jaartallen als "(2023)" niet meer als kopie-aanduiding, bediening met het toetsenbord. |
