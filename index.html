@@ -1,0 +1,1431 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<!-- Blokkeert alle netwerkverkeer: de tool werkt uitsluitend lokaal in de browser -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Doublurecontrole map (v8)</title>
+<style>
+  :root { --blauw:#0b4f8a; --grijs:#f3f5f8; --rand:#d6dce4; --rood:#b42318; --roodlicht:#fdecea; --groen:#1d7a3e; --groenlicht:#e8f5ec; --oranje:#b54708; --oranjelicht:#fff4e5; }
+  * { box-sizing: border-box; }
+  body { font-family: "Segoe UI", Arial, sans-serif; margin: 0; background: #fff; color: #1f2933; font-size: 14px; }
+  header { background: var(--blauw); color: #fff; padding: 16px 24px; }
+  header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+  header p { margin: 4px 0 0; opacity: .85; font-size: 13px; }
+  main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+  .paneel { background: var(--grijs); border: 1px solid var(--rand); border-radius: 6px; padding: 14px 16px; margin-bottom: 16px; }
+  .paneel h2 { margin: 0 0 10px; font-size: 15px; }
+  .opties { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 6px 20px; margin-bottom: 12px; }
+  .opties label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
+  .opties small { color: #52606d; display: block; }
+  .knoppen { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  button, .knop { background: var(--blauw); color: #fff; border: 0; border-radius: 4px; padding: 8px 14px; font-size: 14px; cursor: pointer; font-family: inherit; }
+  button.secundair { background: #fff; color: var(--blauw); border: 1px solid var(--blauw); }
+  button.klein { padding: 4px 10px; font-size: 13px; }
+  button:disabled { opacity: .45; cursor: default; }
+  input[type=file] { display: none; }
+  select { font: inherit; font-size: 13px; padding: 3px 4px; border: 1px solid var(--rand); border-radius: 4px; background: #fff; }
+  .hint { color: #52606d; font-size: 12px; margin-top: 8px; }
+  #voortgang { display: none; }
+  progress { width: 100%; height: 14px; }
+  #voortgangTekst { font-size: 12px; color: #52606d; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kaarten { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .kaart { border: 1px solid var(--rand); border-radius: 6px; padding: 10px 12px; background: #fff; }
+  .kaart .getal { font-size: 22px; font-weight: 600; }
+  .kaart .lbl { font-size: 12px; color: #52606d; }
+  .kaart.rood { border-left: 4px solid var(--rood); }
+  .kaart.groen { border-left: 4px solid var(--groen); }
+  .kaart.oranje { border-left: 4px solid var(--oranje); }
+  .kaart.blauw { border-left: 4px solid var(--blauw); }
+  .tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--rand); margin-bottom: 12px; flex-wrap: wrap; }
+  .tab { background: none; color: #1f2933; border: 0; border-bottom: 3px solid transparent; border-radius: 0; padding: 8px 14px; margin-bottom: -2px; }
+  .tab.actief { border-bottom-color: var(--blauw); color: var(--blauw); font-weight: 600; }
+  .tab.let { color: var(--rood); }
+  .filterbalk { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+  .filterbalk input[type=search] { flex: 1; min-width: 240px; padding: 7px 10px; border: 1px solid var(--rand); border-radius: 4px; font-size: 14px; }
+  details.groep { border: 1px solid var(--rand); border-radius: 6px; margin-bottom: 8px; background: #fff; }
+  details.groep > summary { padding: 8px 12px; cursor: pointer; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  details.groep.afw > summary { background: var(--roodlicht); }
+  details.groep.ident > summary { background: var(--groenlicht); }
+  details.groep.inh > summary { background: var(--oranjelicht); }
+  .gid { font-family: Consolas, monospace; font-size: 12px; color: #52606d; }
+  .gnaam { font-weight: 600; word-break: break-all; }
+  .badge { font-size: 11px; padding: 2px 7px; border-radius: 10px; background: #fff; border: 1px solid var(--rand); }
+  .badge.fout { border-color: var(--rood); }
+  .badge.notitie-ja { border-color: var(--blauw); color: var(--blauw); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 5px 10px; border-top: 1px solid var(--rand); vertical-align: top; }
+  th { background: var(--grijs); font-weight: 600; }
+  td.pad { word-break: break-all; }
+  td.hash { font-family: Consolas, monospace; font-size: 12px; white-space: nowrap; }
+  td.num { text-align: right; white-space: nowrap; }
+  tr.teverw td { background: #fff5f4; }
+  tr.teverw td.pad a { text-decoration: line-through; color: var(--rood); }
+  tr.behoud td { background: #f3faf5; }
+  .var { display: inline-block; min-width: 22px; text-align: center; font-weight: 600; border-radius: 3px; padding: 0 4px; color: #fff; }
+  .fout { color: var(--rood); font-weight: 600; }
+  .leeg { color: #52606d; font-style: italic; padding: 10px 0; }
+  .toel { font-size: 12px; color: #52606d; padding: 6px 12px 10px; }
+  a.open { color: var(--blauw); text-decoration: none; }
+  a.open:hover { text-decoration: underline; }
+  .notitie { padding: 8px 12px 12px; border-top: 1px solid var(--rand); }
+  .notitie label, .identpaneel .lbl { display: block; font-weight: 600; font-size: 12px; margin-bottom: 4px; }
+  textarea { width: 100%; min-height: 52px; padding: 6px 8px; border: 1px solid var(--rand); border-radius: 4px; font: inherit; resize: vertical; }
+  input.foutnotitie { width: 100%; padding: 4px 6px; border: 1px solid var(--rand); border-radius: 4px; font: inherit; font-size: 13px; }
+  .identpaneel { background: var(--groenlicht); border: 1px solid var(--rand); border-radius: 6px; padding: 12px 14px; margin-bottom: 12px; }
+  .identpaneel > div + div { margin-top: 10px; }
+  .identpaneel label.cb { display: flex; gap: 8px; align-items: center; cursor: pointer; font-weight: 600; }
+  .voorstelbalk { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .vergelijk { padding: 8px 12px; border-top: 1px solid var(--rand); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+  .diffres:empty { display: none; }
+  .diffres { padding: 0 12px 12px; font-size: 13px; }
+  .diffkop { background: var(--grijs); border: 1px solid var(--rand); border-radius: 4px; padding: 8px 10px; margin: 4px 0 8px; }
+  .diffwaarsch { background: var(--oranjelicht); border: 1px solid var(--oranje); border-radius: 4px; padding: 6px 10px; margin: 4px 0 8px; }
+  .diffres h4 { margin: 12px 0 4px; font-size: 13px; color: var(--blauw); }
+  .dr { display: flex; gap: 8px; padding: 3px 6px; border-left: 3px solid transparent; white-space: pre-wrap; word-break: break-word; }
+  .dr .dm { flex: 0 0 14px; color: #52606d; font-family: Consolas, monospace; }
+  .dr.mod { border-left-color: var(--oranje); background: #fffaf2; }
+  .dr.del { border-left-color: var(--rood); background: #fff5f4; }
+  .dr.ins { border-left-color: var(--groen); background: #f3faf5; }
+  .dr.eq { color: #52606d; }
+  .dr.skip { color: #8a94a0; font-style: italic; }
+  del { background: #fbd5d1; color: #7a1a12; }
+  ins { background: #cdeed7; color: #0f4d26; text-decoration: none; }
+  .diffres table td.verschil { background: var(--oranjelicht); }
+  td.opm { white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Doublurecontrole map <span style="font-size:13px;font-weight:400;opacity:.8;margin-left:6px">v8</span></h1>
+  <p>Vergelijkt bestanden in een map (inclusief submappen) op naam en controleert daarna via SHA-256-hash of het om identieke bestanden gaat. Alles draait lokaal in de browser; er wordt niets verzonden.</p>
+</header>
+<main>
+  <div id="iframeWaarschuwing" class="paneel" style="display:none;background:var(--oranjelicht);border-color:var(--oranje)">
+    <strong>Let op:</strong> de tool is geopend in een voorbeeldweergave (bijv. OneDrive/SharePoint in de browser). Daarin blokkeert de browser het opslaan van bestanden. Download het HTML-bestand naar uw computer en open het daar met Edge of Chrome.
+  </div>
+
+  <section class="paneel">
+    <h2>1. Instellingen</h2>
+    <div class="opties">
+      <label><input type="checkbox" id="optHoofdletter">
+        <span>Hoofdlettergevoelig vergelijken<small>Standaard uit: Windows maakt geen onderscheid tussen hoofd- en kleine letters.</small></span></label>
+      <label><input type="checkbox" id="optExtensie" checked>
+        <span>Extensie meenemen in naamvergelijking<small>Uit: "Rapport.docx" en "Rapport.pdf" gelden als dezelfde naam.</small></span></label>
+      <label><input type="checkbox" id="optKopie">
+        <span>Kopie-aanduidingen negeren<small>"Rapport (1).docx", "Rapport - kopie.docx" en "Kopie van Rapport.docx" gelden als "Rapport.docx".</small></span></label>
+      <label><input type="checkbox" id="optSysteem" checked>
+        <span>Systeem- en tijdelijke bestanden overslaan<small>Thumbs.db, desktop.ini, .DS_Store en Office-tijdelijke bestanden (~$...).</small></span></label>
+      <label><input type="checkbox" id="optInhoud" checked>
+        <span>Ook zoeken naar zelfde inhoud met andere naam<small>Alleen bestanden met een gelijke grootte worden gehasht; lege bestanden (0 bytes) worden hierbij niet meegenomen.</small></span></label>
+    </div>
+    <div class="knoppen">
+      <label for="kiezer" class="knop">Map kiezen en analyseren</label>
+      <input type="file" id="kiezer" webkitdirectory directory multiple>
+      <button id="opnieuw" class="secundair" disabled>Opnieuw analyseren met gewijzigde instellingen</button>
+      <button id="stop" class="secundair" disabled>Afbreken</button>
+      <span id="mapNaam" class="hint"></span>
+    </div>
+    <div class="hint">De browser vraagt mogelijk of u de bestanden wilt "uploaden". Dit is een standaardmelding: de bestanden worden alleen lokaal gelezen. Bestanden die alleen online in OneDrive/SharePoint staan, worden bij het lezen eerst gedownload.</div>
+    <div id="voortgang" style="margin-top:12px">
+      <progress id="voortgangBalk" value="0" max="1"></progress>
+      <div id="voortgangTekst"></div>
+    </div>
+  </section>
+
+  <section id="resultaat" style="display:none">
+    <div class="kaarten" id="kaarten"></div>
+    <div class="tabs" id="tabs"></div>
+    <div class="filterbalk">
+      <input type="search" id="filter" placeholder="Filter op bestandsnaam of pad...">
+      <button class="secundair" id="alleOpen">Alles uitklappen</button>
+      <button class="secundair" id="alleDicht">Alles inklappen</button>
+    </div>
+    <div class="filterbalk">
+      <button id="exportXlsx">Exporteren naar Excel</button>
+      <button id="exportRapport">Rapport (Word)</button>
+      <button class="secundair" id="voortgangOpslaan">Opmerkingen opslaan</button>
+      <button class="secundair" id="voortgangLaden">Opmerkingen laden</button>
+      <input type="file" id="importKiezer" accept=".json,application/json">
+    </div>
+    <div id="exportStatus" class="hint" style="margin:0 0 12px"></div>
+    <div id="lijst"></div>
+  </section>
+</main>
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const state = {
+  bestanden: [], mapNaam: "", res: null, stop: false, tab: "afw", busy: false,
+  notities: new Map(),      // groepsleutel (gesorteerde paden) -> opmerking; "fout:<pad>" -> opmerking niet-leesbaar bestand
+  acties: new Map(),        // pad -> { actie: "behouden" | "verwijderen", hash }
+  identEen: true,           // één opmerking voor alle identieke doublures
+  identAlgemeen: "",
+  nietGekoppeld: [],        // opmerkingen zonder passende groep: { categorie, paden, opmerking }
+  diffs: new Map(),
+  open: new Map(),
+  gewijzigd: false
+};
+const KLEUREN = ["#0b4f8a","#b54708","#6941c6","#1d7a3e","#b42318","#0e7090","#c11574","#4d5761"];
+const CATNAAM = { afw: "Zelfde naam, afwijkende inhoud", ident: "Identieke doublures", inh: "Zelfde inhoud, andere naam", fout: "Niet leesbaar" };
+
+/* ---------- Hulpfuncties ---------- */
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+const fmtGrootte = b => {
+  if (b < 1024) return b + " B";
+  const e = ["KB","MB","GB","TB"]; let i = -1;
+  do { b /= 1024; i++; } while (b >= 1024 && i < e.length - 1);
+  return b.toLocaleString("nl-NL", { maximumFractionDigits: 1 }) + " " + e[i];
+};
+const fmtDatum = ms => ms ? new Date(ms).toLocaleString("nl-NL", { dateStyle: "short", timeStyle: "short" }) : "";
+const SYS = /^(thumbs\.db|desktop\.ini|\.ds_store|ehthumbs\.db)$/i;
+const isSysteem = n => SYS.test(n) || n.startsWith("~$") || n.startsWith("._");
+function splitExt(n) { const i = n.lastIndexOf("."); return i > 0 ? [n.slice(0, i), n.slice(i)] : [n, ""]; }
+
+function naamSleutel(naam, o) {
+  let [basis, ext] = splitExt(naam);
+  if (o.kopie) {
+    let vorige;
+    do {
+      vorige = basis;
+      basis = basis
+        .replace(/^(kopie van|copy of)\s+/i, "")
+        .replace(/\s*-\s*(kopie|copy)(\s*\(\d+\))?$/i, "")
+        .replace(/\s*\(\d+\)$/, "")
+        .trim();
+    } while (basis !== vorige && basis.length);
+  }
+  const k = o.extensie ? basis + ext : basis;
+  return o.hoofdletter ? k : k.toLocaleLowerCase("nl-NL");
+}
+
+async function sha256(file) {
+  const buf = await file.arrayBuffer();
+  const h = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(h), b => b.toString(16).padStart(2, "0")).join("");
+}
+
+function leesOpties() {
+  return {
+    hoofdletter: $("optHoofdletter").checked, extensie: $("optExtensie").checked, kopie: $("optKopie").checked,
+    systeem: $("optSysteem").checked, inhoud: $("optInhoud").checked
+  };
+}
+
+function zetBezig(b) {
+  state.busy = b;
+  $("stop").disabled = !b;
+  $("opnieuw").disabled = b || !state.bestanden.length;
+  $("kiezer").disabled = b;
+  $("voortgang").style.display = b ? "block" : "none";
+}
+function meldExport(tekst, fout) { const el = $("exportStatus"); el.textContent = tekst; el.style.color = fout ? "var(--rood)" : ""; }
+function markeerGewijzigd() { state.gewijzigd = true; }
+function toonMapNaam() {
+  $("mapNaam").textContent = state.mapNaam ? `Gekozen map: ${state.mapNaam} (${state.bestanden.length.toLocaleString("nl-NL")} bestanden)` : "";
+}
+
+/* ---------- Hashen met beperkte parallelliteit ---------- */
+async function hashAlles(lijst) {
+  const N = lijst.length; let i = 0, klaar = 0;
+  const totaalBytes = lijst.reduce((s, x) => s + x.grootte, 0); let bytes = 0;
+  $("voortgangBalk").max = Math.max(N, 1); $("voortgangBalk").value = 0;
+  async function werker() {
+    while (i < N && !state.stop) {
+      const it = lijst[i++];
+      try {
+        const h = await Promise.race([sha256(it.file), state.stopBelofte]);
+        if (state.stop) break;                       // afgebroken tijdens een groot bestand
+        it.hash = h;
+      }
+      catch (e) { it.hash = null; it.fout = (e && (e.name || e.message)) || String(e); }
+      klaar++; bytes += it.grootte;
+      $("voortgangBalk").value = klaar;
+      $("voortgangTekst").textContent = `Hashen: ${klaar} / ${N} bestanden (${fmtGrootte(bytes)} van ${fmtGrootte(totaalBytes)}) - ${it.pad}`;
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(4, N) }, werker));
+}
+
+async function controleerLegeBestanden(lijst) {
+  for (const it of lijst) {
+    if (state.stop) return;
+    try { await it.file.arrayBuffer(); }
+    catch (e) { it.hash = null; it.fout = (e && (e.name || e.message)) || String(e); }
+  }
+}
+
+/* ---------- Analyse ---------- */
+async function analyseer(bestanden, mapNaam, nieuweMap) {
+  if (!bestanden.length || state.busy) return;
+  if (!(window.crypto && crypto.subtle)) { alert("Deze browser ondersteunt geen hashfunctie (crypto.subtle). Gebruik een actuele versie van Edge of Chrome."); return; }
+  const o = leesOpties();
+  state.stop = false; state.stopBelofte = new Promise(res => { state.stopSein = res; }); zetBezig(true);
+  $("mapNaam").textContent = `Bezig met map: ${mapNaam} (${bestanden.length.toLocaleString("nl-NL")} bestanden)`;
+  $("voortgangTekst").textContent = "Bestanden inventariseren...";
+
+  const alle = bestanden.map(f => ({ file: f, naam: f.name, pad: f.webkitRelativePath || f.name, grootte: f.size, gewijzigd: f.lastModified, hash: undefined, fout: null }));
+  const items = o.systeem ? alle.filter(x => !isSysteem(x.naam)) : alle;
+  const overgeslagen = alle.length - items.length;
+
+  const opNaam = new Map();
+  for (const it of items) {
+    it.sleutel = naamSleutel(it.naam, o);
+    if (!opNaam.has(it.sleutel)) opNaam.set(it.sleutel, []);
+    opNaam.get(it.sleutel).push(it);
+  }
+  const naamGroepen = [...opNaam.values()].filter(g => g.length > 1);
+
+  // Alleen hashen wat nodig is: naamgroepen + (bij inhoudscontrole) niet-lege bestanden met een gedeelde grootte
+  const teHashenSet = new Set(naamGroepen.flat());
+  if (o.inhoud) {
+    const perGrootte = new Map();
+    for (const it of items) if (it.grootte > 0) perGrootte.set(it.grootte, (perGrootte.get(it.grootte) || 0) + 1);
+    for (const it of items) if (it.grootte > 0 && perGrootte.get(it.grootte) > 1) teHashenSet.add(it);
+  }
+  const teHashen = [...teHashenSet];
+  await hashAlles(teHashen);
+  // Bestanden die de browser niet kan lezen (bijv. pad te lang) hebben vaak grootte 0 en worden daardoor niet gehasht.
+  if (!state.stop) await controleerLegeBestanden(items.filter(x => x.grootte === 0 && x.hash === undefined));
+  if (state.stop) {
+    zetBezig(false); $("voortgang").style.display = "block";
+    toonMapNaam();
+    $("voortgangTekst").textContent = state.res
+      ? `Analyse afgebroken. De resultaten van de vorige analyse (map "${state.mapNaam}") blijven getoond.`
+      : "Analyse afgebroken. Er zijn geen resultaten.";
+    return;
+  }
+
+  const ident = [], afw = [], inh = [];
+  for (const g of naamGroepen) {
+    const lv = labelVarianten(g);
+    const fouten = g.filter(x => !x.hash).length;
+    if (fouten || lv.varianten.size > 1) afw.push({ items: g, ...lv, fouten });
+    else ident.push({ items: g, ...lv, fouten: 0 });
+  }
+  if (o.inhoud) {
+    const opHash = new Map();
+    for (const it of items) if (it.hash && it.grootte > 0) { if (!opHash.has(it.hash)) opHash.set(it.hash, []); opHash.get(it.hash).push(it); }
+    for (const g of opHash.values())
+      if (g.length > 1 && new Set(g.map(x => x.sleutel)).size > 1) inh.push({ items: g, ...labelVarianten(g), fouten: 0 });
+  }
+  const sorteer = arr => arr.sort((a, b) => a.items[0].naam.localeCompare(b.items[0].naam, "nl"));
+  sorteer(afw); sorteer(ident); sorteer(inh);
+  afw.forEach((g, i) => { g.id = "A" + (i + 1); g.cat = "afw"; });
+  ident.forEach((g, i) => { g.id = "I" + (i + 1); g.cat = "ident"; g.hash = g.items[0].hash; });
+  inh.forEach((g, i) => { g.id = "C" + (i + 1); g.cat = "inh"; g.hash = g.items[0].hash; });
+
+  const perPad = new Map(), perId = new Map(), hashSets = new Map();
+  for (const g of [...afw, ...ident, ...inh]) {
+    g.sleutel = g.items.map(x => x.pad).sort().join("|");
+    perId.set(g.id, g);
+    for (const x of g.items) { if (!perPad.has(x.pad)) perPad.set(x.pad, []); perPad.get(x.pad).push(g.id); }
+  }
+  for (const g of [...ident, ...inh]) for (const x of g.items) {
+    if (!hashSets.has(x.hash)) hashSets.set(x.hash, new Map());
+    hashSets.get(x.hash).set(x.pad, x);
+  }
+  const opPad = new Map(items.map(x => [x.pad, x]));
+  const onleesbaar = items.filter(x => x.hash === null).sort((a, b) => a.pad.localeCompare(b.pad, "nl"));
+  const leeg = items.filter(x => x.grootte === 0 && x.hash !== null).length;
+
+  // Bestaande invoer vastleggen voordat de oude resultaten worden vervangen
+  const snapshot = (!nieuweMap && state.res) ? notitieLijst() : null;
+
+  state.res = { o, totaal: items.length, overgeslagen, leeg, gehasht: teHashen.length, naamGroepen: naamGroepen.length, ident, afw, inh, onleesbaar, perPad, perId, opPad, hashSets };
+  state.bestanden = bestanden; state.mapNaam = mapNaam;
+  state.diffs = new Map();
+  zetBezig(false); toonMapNaam();
+
+  let melding = "", fout = false;
+  if (nieuweMap) {
+    state.notities = new Map(); state.acties = new Map(); state.identAlgemeen = ""; state.identEen = true;
+    state.nietGekoppeld = []; state.open = new Map(); state.gewijzigd = false;
+  } else {
+    let k = { exact: 0, deels: 0, niet: [] };
+    if (snapshot) { state.notities = new Map(); k = koppelNotities([...snapshot, ...state.nietGekoppeld]); state.nietGekoppeld = k.niet; }
+    const weg = controleerActies();
+    if (k.deels || k.niet.length || weg) {
+      fout = true;
+      melding = "Na de nieuwe analyse: " + [
+        k.deels ? `${k.deels} opmerking(en) gekoppeld aan een gewijzigde groep (controleer deze)` : "",
+        k.niet.length ? `${k.niet.length} opmerking(en) niet meer te koppelen (zie tab Niet gekoppeld)` : "",
+        weg ? `${weg} keuze(s) behouden/verwijderen vervallen omdat het bestand inhoudelijk is gewijzigd of ontbreekt` : ""
+      ].filter(Boolean).join("; ") + ".";
+    }
+  }
+  if (state.tab === "inh" && !o.inhoud) state.tab = "afw";
+  if (state.tab === "fout" && !onleesbaar.length) state.tab = "afw";
+  if (state.tab === "nietgek" && !state.nietGekoppeld.length) state.tab = "afw";
+  toon();
+  meldExport(melding, fout);
+}
+
+function labelVarianten(g) {
+  const m = new Map(), letters = new Map();
+  for (const it of g) {
+    if (!it.hash) { letters.set(it.pad, "?"); continue; }
+    if (!m.has(it.hash)) { const n = m.size; m.set(it.hash, String.fromCharCode(65 + (n % 26)) + (n >= 26 ? Math.floor(n / 26) : "")); }
+    letters.set(it.pad, m.get(it.hash));
+  }
+  return { varianten: new Set(m.keys()), letters };
+}
+
+/* ---------- Opmerkingen en keuzes koppelen ---------- */
+function notitieLijst() {
+  const r = state.res; const cat = new Map();
+  for (const g of [...r.afw, ...r.ident, ...r.inh]) cat.set(g.sleutel, g.cat);
+  const lijst = [];
+  for (const [k, t] of state.notities) {
+    if (!t) continue;
+    if (k.startsWith("fout:")) lijst.push({ categorie: "fout", paden: [k.slice(5)], opmerking: t });
+    else lijst.push({ categorie: cat.get(k) || "", paden: k.split("|"), opmerking: t });
+  }
+  return lijst;
+}
+
+function koppelNotities(lijst) {
+  const r = state.res, groepen = [...r.afw, ...r.ident, ...r.inh];
+  const onl = new Set(r.onleesbaar.map(x => x.pad));
+  const zet = (k, t) => { const b = state.notities.get(k); state.notities.set(k, b && b !== t && !b.includes(t) ? b + "\n" + t : t); };
+  let exact = 0, deels = 0; const niet = [];
+  for (const n of lijst) {
+    if (!n || !n.opmerking || !Array.isArray(n.paden) || !n.paden.length) continue;
+    if (n.categorie === "fout") {
+      if (onl.has(n.paden[0])) { zet("fout:" + n.paden[0], n.opmerking); exact++; } else niet.push(n);
+      continue;
+    }
+    const sl = [...n.paden].sort().join("|");
+    let doel = groepen.find(g => g.sleutel === sl);
+    if (doel) exact++;
+    else {
+      // Alleen koppelen aan een groep van dezelfde categorie; anders komt de opmerking bij Niet gekoppeld
+      const set = new Set(n.paden);
+      const kandidaten = n.categorie ? groepen.filter(g => g.cat === n.categorie) : groepen;
+      let best = null, bo = 0, gelijk = false;
+      for (const g of kandidaten) {
+        const o = g.items.filter(x => set.has(x.pad)).length;
+        if (o > bo) { bo = o; best = g; gelijk = false; } else if (o === bo && o > 0) gelijk = true;
+      }
+      if (best && !gelijk) { doel = best; deels++; } else { niet.push(n); continue; }
+    }
+    zet(doel.sleutel, n.opmerking);
+  }
+  return { exact, deels, niet };
+}
+
+// Keuzes vervallen als het bestand ontbreekt of inhoudelijk is gewijzigd. Bestanden die door andere instellingen
+// (tijdelijk) niet gehasht zijn, houden hun keuze; die telt pas weer mee als het bestand opnieuw als doublure is vastgesteld.
+function controleerActies() {
+  const r = state.res; let weg = 0;
+  for (const [pad, a] of [...state.acties]) {
+    const x = r.opPad.get(pad);
+    if (!x || (x.hash !== undefined && x.hash !== a.hash)) { state.acties.delete(pad); weg++; }
+  }
+  return weg;
+}
+// Keuze is alleen geldig als het bestand een vastgestelde doublure is met dezelfde inhoud als bij het maken van de keuze
+function isDoublure(pad) {
+  const r = state.res, x = r.opPad.get(pad);
+  if (!x || !x.hash) return false;
+  if (r.hashSets.has(x.hash) && r.hashSets.get(x.hash).has(pad)) return true;
+  return (r.perPad.get(pad) || []).some(id => r.perId.get(id).cat === "afw");
+}
+function actieGeldig(pad) {
+  const a = state.acties.get(pad), x = state.res.opPad.get(pad);
+  return !!(a && x && x.hash && x.hash === a.hash && isDoublure(pad));
+}
+
+/* ---------- Groephulpen ---------- */
+const vl = (g, x) => g.letters.get(x.pad) || "?";
+const ookIn = (g, x) => (state.res.perPad.get(x.pad) || []).filter(id => id !== g.id);
+const nieuwsteIn = g => Math.max(...g.items.map(x => x.gewijzigd || 0));
+// "nieuwste" alleen tonen als niet alle bestanden dezelfde (hoogste) wijzigingsdatum hebben
+function isNieuwste(g, x) {
+  if (g.items.length < 2) return false;
+  const max = nieuwsteIn(g);
+  return x.gewijzigd === max && g.items.some(y => y.gewijzigd !== max);
+}
+const gelijkeDatum = g => g.items.length > 1 && g.items.every(y => y.gewijzigd === g.items[0].gewijzigd);
+const gesorteerd = g => [...g.items].sort((a, b) => {
+  const va = vl(g, a), vb = vl(g, b);
+  return (va === "?") - (vb === "?") || va.localeCompare(vb) || a.pad.localeCompare(b.pad, "nl");
+});
+const padLink = x => `<a href="#" class="open" data-pad="${esc(x.pad)}" title="Bestand openen">${esc(x.pad)}</a>`;
+const diepte = x => x.pad.split("/").length;
+const actieVan = pad => actieGeldig(pad) ? state.acties.get(pad).actie : "";
+function zetActie(pad, actie) {
+  const x = state.res.opPad.get(pad);
+  if (actie && x && x.hash) state.acties.set(pad, { actie, hash: x.hash }); else state.acties.delete(pad);
+}
+const heeftActies = g => g.cat === "ident" || g.cat === "inh" || g.cat === "afw";
+// Afwijkingen: blijft na de voorgestelde verwijderingen nog minstens één versie (in deze groep of elders) over?
+function afwAllesWeg(g) {
+  const lees = g.items.filter(x => x.hash);
+  if (!lees.length || !lees.every(x => actieVan(x.pad) === "verwijderen")) return false;
+  return ![...g.varianten].some(h => blijvers(h).length);
+}
+
+function actieTelling(g) {
+  let b = 0, v = 0;
+  for (const x of g.items) { const a = actieVan(x.pad); if (a === "behouden") b++; else if (a === "verwijderen") v++; }
+  return { b, v };
+}
+// Blijft er van deze inhoud (hash) minstens één exemplaar over?
+function blijvers(hash) {
+  const set = state.res.hashSets.get(hash);
+  return set ? [...set.values()].filter(x => actieVan(x.pad) !== "verwijderen") : [];
+}
+function actieStatusHtml(g) {
+  const t = actieTelling(g);
+  if (!t.b && !t.v) return "";
+  if (g.cat === "afw") {
+    if (afwAllesWeg(g)) return `<span class="badge fout">alle versies op verwijderen</span>`;
+    return `<span class="badge">voorstel: ${t.b} behouden, ${t.v} verwijderen</span>`;
+  }
+  const blijft = blijvers(g.hash);
+  if (!blijft.length) return `<span class="badge fout">alle exemplaren van deze inhoud op verwijderen</span>`;
+  if (t.v === g.items.length) {
+    const elders = [...new Set(blijft.flatMap(x => state.res.perPad.get(x.pad) || []))].filter(id => id !== g.id);
+    return `<span class="badge">alle exemplaren in deze groep op verwijderen; inhoud blijft behouden${elders.length ? " via " + esc(elders.join(", ")) : ""}</span>`;
+  }
+  return `<span class="badge">voorstel: ${t.b} behouden, ${t.v} verwijderen</span>`;
+}
+function voorgesteldVerwijderen() {
+  const r = state.res; let n = 0, bytes = 0, alles = 0;
+  for (const [pad, a] of state.acties) if (a.actie === "verwijderen" && actieGeldig(pad)) { n++; bytes += r.opPad.get(pad).grootte; }
+  for (const h of r.hashSets.keys()) if (!blijvers(h).length) alles++;
+  for (const g of r.afw) if (afwAllesWeg(g)) alles++;
+  return { n, bytes, alles };
+}
+
+/* ---------- Weergave ---------- */
+function toon() {
+  if (!state.res) return;
+  $("resultaat").style.display = "block";
+  toonKaarten(); toonTabs(); toonLijst();
+}
+
+function toonKaarten() {
+  const r = state.res;
+  const overbodig = r.ident.reduce((s, g) => s + g.items[0].grootte * (g.items.length - 1), 0);
+  const vv = voorgesteldVerwijderen();
+  const extra = [r.overgeslagen ? `${r.overgeslagen} systeembestanden overgeslagen` : "", r.o.inhoud && r.leeg ? `${r.leeg} lege bestanden niet op inhoud vergeleken` : ""].filter(Boolean).join("; ");
+  const kaarten = [
+    ["", r.totaal, "bestanden geanalyseerd" + (extra ? ` (${extra})` : "")],
+    ["", r.naamGroepen, "namen die meer dan eens voorkomen"],
+    ["rood", r.afw.length, "zelfde naam, afwijkende inhoud (handmatig beoordelen)"],
+    ["groen", r.ident.length, `identieke doublures (${r.ident.reduce((s, g) => s + g.items.length, 0)} bestanden, ${fmtGrootte(overbodig)} overbodig)`]
+  ];
+  if (r.o.inhoud) kaarten.push(["oranje", r.inh.length, "zelfde inhoud, andere naam"]);
+  if (r.onleesbaar.length) kaarten.push(["rood", r.onleesbaar.length, "bestanden niet leesbaar (zie tab Niet leesbaar)"]);
+  if (vv.n) kaarten.push([vv.alles ? "rood" : "blauw", vv.n, `voorgesteld te verwijderen (${fmtGrootte(vv.bytes)})` + (vv.alles ? `; let op: van ${vv.alles} inhoud(en) staan alle exemplaren op verwijderen` : "")]);
+  $("kaarten").innerHTML = kaarten.map(([c, n, l]) =>
+    `<div class="kaart ${c}"><div class="getal">${n.toLocaleString("nl-NL")}</div><div class="lbl">${esc(l)}</div></div>`).join("");
+}
+
+function toonTabs() {
+  const r = state.res;
+  const tabs = [["afw", `Afwijkingen (${r.afw.length})`], ["ident", `Identieke doublures (${r.ident.length})`]];
+  if (r.o.inhoud) tabs.push(["inh", `Zelfde inhoud, andere naam (${r.inh.length})`]);
+  if (r.onleesbaar.length) tabs.push(["fout", `Niet leesbaar (${r.onleesbaar.length})`]);
+  if (state.nietGekoppeld.length) tabs.push(["nietgek", `Niet gekoppelde opmerkingen (${state.nietGekoppeld.length})`, "let"]);
+  $("tabs").innerHTML = tabs.map(([k, l, c]) => `<button class="tab ${c || ""} ${state.tab === k ? "actief" : ""}" data-tab="${k}">${esc(l)}</button>`).join("");
+}
+
+function opmerkingPaneel() {
+  return `<div class="identpaneel"><div><label class="cb"><input type="checkbox" id="identEen" ${state.identEen ? "checked" : ""}> Eén opmerking voor alle identieke doublures</label>
+    ${state.identEen
+      ? `<textarea id="identAlgemeen" style="margin-top:6px" placeholder="Bijv.: Verwijder per groep de exemplaren die als 'verwijderen' zijn gemarkeerd.">${esc(state.identAlgemeen)}</textarea>`
+      : `<div class="hint" style="margin-top:4px">Per groep is een eigen opmerkingenveld beschikbaar.</div>`}</div></div>`;
+}
+function voorstelPaneel() {
+  return `<div class="identpaneel"><div><span class="lbl">Voorstel welke exemplaren verwijderd kunnen worden</span>
+    <div class="voorstelbalk">Per inhoud behouden:
+      <select id="voorstelRegel">
+        <option value="oudste">bestand met de oudste wijzigingsdatum</option>
+        <option value="nieuwste">bestand met de nieuwste wijzigingsdatum</option>
+        <option value="ondiepst">bestand in de minst diepe map</option>
+        <option value="alfabetisch">eerste pad op alfabet</option>
+      </select>
+      <label style="display:flex;gap:4px;align-items:center"><input type="checkbox" id="voorstelOverschrijf"> bestaande keuzes overschrijven</label>
+      <button class="klein" id="voorstelToepassen">Voorstel toepassen</button>
+      <button class="klein secundair" id="voorstelWissen">Alle keuzes wissen</button>
+    </div>
+    <div class="hint">Het voorstel geldt per inhoud: van alle identieke bestanden (ook met een andere naam) blijft er één behouden. Bij kopiëren via Verkenner blijft de wijzigingsdatum gelijk; de tool meldt het dan als de datum geen uitsluitsel gaf. Keuzes zijn per bestand aan te passen in de kolom Actie en worden overgenomen in het Word-rapport en de Excel-export.</div>
+  </div></div>`;
+}
+
+function groepHtml(g) {
+  const tab = g.cat;
+  const nVar = g.varianten.size;
+  const open = state.open.has(g.sleutel) ? state.open.get(g.sleutel) : tab === "afw";
+  let badges = `<span class="badge">${g.items.length} bestanden</span>`;
+  if (tab === "afw") {
+    badges += `<span class="badge">${nVar} variant${nVar === 1 ? "" : "en"}</span>`;
+    if (g.fouten) badges += `<span class="badge fout">${g.fouten} niet leesbaar</span>`;
+    const groottes = new Set(g.items.filter(x => x.hash).map(x => x.grootte));
+    if (nVar > 1 && groottes.size === 1) badges += `<span class="badge">zelfde grootte</span>`;
+  } else badges += `<span class="badge">${fmtGrootte(g.items[0].grootte)} per bestand</span>`;
+  if (gelijkeDatum(g)) badges += `<span class="badge" title="Bij kopiëren via Verkenner blijft de wijzigingsdatum behouden">gelijke wijzigingsdatum</span>`;
+  const heeftNotitie = !!state.notities.get(g.sleutel) && !(tab === "ident" && state.identEen);
+  badges += `<span class="notitiestatus">${heeftNotitie ? `<span class="badge notitie-ja">opmerking</span>` : ""}</span>`;
+  if (heeftActies(g)) badges += `<span class="actiestatus">${actieStatusHtml(g)}</span>`;
+
+  const titel = tab === "inh" ? [...new Set(g.items.map(x => x.naam))].join("  |  ") : g.items[0].naam;
+  const tr = gesorteerd(g).map(x => {
+    const v = vl(g, x);
+    const kleur = v === "?" ? "#4d5761" : KLEUREN[(v.charCodeAt(0) - 65) % KLEUREN.length];
+    const ook = ookIn(g, x);
+    const actie = actieVan(x.pad);
+    const actieCel = heeftActies(g) && !x.hash ? `<td class="hint">n.v.t.</td>` : heeftActies(g) ? `<td><select class="actie" data-pad="${esc(x.pad)}" data-g="${g.id}">
+        <option value="" ${!actie ? "selected" : ""}>(geen)</option>
+        <option value="behouden" ${actie === "behouden" ? "selected" : ""}>Behouden</option>
+        <option value="verwijderen" ${actie === "verwijderen" ? "selected" : ""}>Verwijderen</option></select></td>` : "";
+    const rk = heeftActies(g) ? (actie === "verwijderen" ? "teverw" : actie === "behouden" ? "behoud" : "") : "";
+    return `<tr class="${rk}">
+      <td><span class="var" style="background:${kleur}">${esc(v)}</span></td>
+      <td class="pad">${padLink(x)}${ook.length ? ` <span class="badge" title="Dit bestand komt ook voor in een andere groep">ook in ${esc(ook.join(", "))}</span>` : ""}</td>
+      <td class="num">${esc(fmtGrootte(x.grootte))}</td>
+      <td style="white-space:nowrap">${esc(fmtDatum(x.gewijzigd))}${isNieuwste(g, x) ? " <span class='badge'>nieuwste</span>" : ""}</td>
+      <td class="hash" title="${esc(x.hash || "")}">${x.hash ? esc(x.hash.slice(0, 16)) + "&hellip;" : `<span class="fout" title="${esc(x.fout || "")}">leesfout</span>`}</td>
+      ${actieCel}
+    </tr>`;
+  }).join("");
+  const toel = tab === "afw"
+    ? `<div class="toel">Bestanden met dezelfde variantletter zijn binair identiek. Verschillende letters: inhoud vergelijken. Klik op een pad om het bestand te openen. In de kolom Actie kunt u voorstellen welke versie behouden blijft en welke verwijderd kan worden.</div>` : "";
+  const notLabel = tab === "afw" ? "Opmerking / uitkomst handmatige vergelijking" : "Opmerking";
+  const notitie = (tab === "ident" && state.identEen) ? "" :
+    `<div class="notitie"><label for="n_${g.id}">${notLabel}</label><textarea id="n_${g.id}" data-sleutel="${esc(g.sleutel)}" data-g="${g.id}" placeholder="Wat moet er met deze bestanden gebeuren?">${esc(state.notities.get(g.sleutel) || "")}</textarea></div>`;
+  return `<details class="groep ${tab}" data-id="${g.id}" data-sleutel="${esc(g.sleutel)}" ${open ? "open" : ""}>
+    <summary><span class="gid">${g.id}</span><span class="gnaam">${esc(titel)}</span>${badges}</summary>
+    ${toel}
+    <table><thead><tr><th style="width:60px">Variant</th><th>Pad</th><th style="width:90px">Grootte</th><th style="width:190px">Gewijzigd</th><th style="width:170px">SHA-256</th>${heeftActies(g) ? `<th style="width:130px">Actie</th>` : ""}</tr></thead>
+    <tbody>${tr}</tbody></table>
+    ${tab === "afw" ? vergelijkBlok(g) : ""}
+    ${notitie}
+  </details>`;
+}
+
+function toonLijst() {
+  const r = state.res; const f = $("filter").value.trim().toLocaleLowerCase("nl-NL");
+  const match = x => !f || x.pad.toLocaleLowerCase("nl-NL").includes(f);
+  const leeg = `<div class="leeg">Geen resultaten${f ? " voor dit filter" : ""}.</div>`;
+
+  if (state.tab === "nietgek") {
+    $("lijst").innerHTML = `<div class="toel" style="padding-left:0">Deze opmerkingen horen bij groepen die na een nieuwe analyse of het laden van een opmerkingenbestand niet meer bestaan (bijv. door gewijzigde instellingen of bestanden). Ze komen niet in het rapport, maar worden wel bewaard bij Opmerkingen opslaan. Kopieer ze zo nodig naar de juiste groep en verwijder ze hier.</div>
+      <table><thead><tr><th style="width:190px">Categorie</th><th>Bestanden</th><th style="width:34%">Opmerking</th><th style="width:110px"></th></tr></thead><tbody>` +
+      state.nietGekoppeld.map((n, i) => `<tr><td>${esc(CATNAAM[n.categorie] || "Onbekend")}</td><td class="pad">${n.paden.map(esc).join("<br>")}</td><td class="opm">${esc(n.opmerking)}</td><td><button class="klein secundair nkWeg" data-i="${i}">Verwijderen</button></td></tr>`).join("") +
+      `</tbody></table>`;
+    return;
+  }
+  if (state.tab === "fout") {
+    const z = r.onleesbaar.filter(match);
+    $("lijst").innerHTML = !z.length ? leeg :
+      `<div class="toel" style="padding-left:0">Deze bestanden konden niet worden gelezen en zijn dus niet gecontroleerd. Mogelijke oorzaken: pad of bestandsnaam te lang (Windows-limiet van 260 tekens; bij foutmelding NotFoundError de meest waarschijnlijke oorzaak), bestand geopend of vergrendeld, alleen online beschikbaar, of verplaatst/verwijderd na het kiezen van de map.</div>
+      <table><thead><tr><th>Pad</th><th style="width:90px">Grootte</th><th style="width:150px">Gewijzigd</th><th style="width:170px">Foutmelding</th><th style="width:34%">Opmerking</th></tr></thead><tbody>` +
+      z.map(x => `<tr><td class="pad">${padLink(x)}</td><td class="num">${esc(fmtGrootte(x.grootte))}</td><td>${esc(fmtDatum(x.gewijzigd))}</td><td class="fout">${esc(x.fout || "")}</td>
+        <td><input type="text" class="foutnotitie" data-sleutel="${esc("fout:" + x.pad)}" value="${esc(state.notities.get("fout:" + x.pad) || "")}"></td></tr>`).join("") +
+      `</tbody></table>`;
+    return;
+  }
+  let kop = "";
+  if (state.tab === "ident" && r.ident.length) kop = opmerkingPaneel() + voorstelPaneel();
+  if (state.tab === "inh" && r.inh.length) kop = voorstelPaneel();
+  const groepen = r[state.tab] || [];
+  const zicht = f ? groepen.filter(g => g.items.some(match)) : groepen;
+  $("lijst").innerHTML = kop + (zicht.length ? zicht.map(groepHtml).join("") : leeg);
+}
+
+function werkGroepStatusBij(g) {
+  const d = document.querySelector(`details.groep[data-id="${g.id}"]`); if (!d) return;
+  const a = d.querySelector(".actiestatus"); if (a) a.innerHTML = actieStatusHtml(g);
+  const n = d.querySelector(".notitiestatus");
+  if (n) n.innerHTML = state.notities.get(g.sleutel) && !(g.cat === "ident" && state.identEen) ? `<span class="badge notitie-ja">opmerking</span>` : "";
+  d.querySelectorAll("select.actie").forEach(s => {
+    const tr = s.closest("tr"); tr.className = s.value === "verwijderen" ? "teverw" : s.value === "behouden" ? "behoud" : "";
+  });
+}
+// Na wijziging van een keuze: alle groepen met dezelfde inhoud bijwerken (ook in andere tabbladen bij volgende weergave)
+function werkInhoudBij(pad) {
+  const x = state.res.opPad.get(pad); if (!x) return;
+  for (const g of [...state.res.afw, ...state.res.ident, ...state.res.inh])
+    if (g.items.some(y => y.pad === pad || (x.hash && y.hash === x.hash))) werkGroepStatusBij(g);
+}
+
+/* ---------- Voorstel per inhoud ---------- */
+const REGELS = {
+  oudste: (a, b) => (a.gewijzigd || 0) - (b.gewijzigd || 0) || diepte(a) - diepte(b) || a.pad.localeCompare(b.pad, "nl"),
+  nieuwste: (a, b) => (b.gewijzigd || 0) - (a.gewijzigd || 0) || diepte(a) - diepte(b) || a.pad.localeCompare(b.pad, "nl"),
+  ondiepst: (a, b) => diepte(a) - diepte(b) || (a.gewijzigd || 0) - (b.gewijzigd || 0) || a.pad.localeCompare(b.pad, "nl"),
+  alfabetisch: (a, b) => a.pad.localeCompare(b.pad, "nl")
+};
+const PRIMAIR = { oudste: x => x.gewijzigd || 0, nieuwste: x => x.gewijzigd || 0, ondiepst: diepte, alfabetisch: null };
+function voorstelToepassen() {
+  const regelNaam = $("voorstelRegel").value, regel = REGELS[regelNaam], prim = PRIMAIR[regelNaam];
+  const overschrijf = $("voorstelOverschrijf").checked;
+  let n = 0, over = 0, gelijk = 0;
+  for (const set of state.res.hashSets.values()) {
+    const lijst = [...set.values()];
+    if (!overschrijf && lijst.some(x => actieVan(x.pad))) { over++; continue; }
+    lijst.sort(regel);
+    if (prim && lijst.length > 1 && prim(lijst[0]) === prim(lijst[1])) gelijk++;
+    lijst.forEach((x, i) => zetActie(x.pad, i ? "verwijderen" : "behouden"));
+    n++;
+  }
+  markeerGewijzigd(); toonKaarten(); toonLijst();
+  const crit = regelNaam === "ondiepst" ? "mapdiepte" : "wijzigingsdatum";
+  const terug = regelNaam === "ondiepst" ? "de wijzigingsdatum en daarna het alfabet" : "de mapdiepte en daarna het alfabet";
+  meldExport(`Voorstel toegepast op ${n} inhoud(en)` +
+    (over ? `; ${over} inhoud(en) met bestaande keuzes ongewijzigd gelaten` : "") +
+    (gelijk ? `. Let op: bij ${gelijk} inhoud(en) gaf de ${crit} geen uitsluitsel en is gekozen op ${terug}; controleer deze keuzes` : "") + ".", gelijk > 0);
+}
+/* ---------- Inhoudelijke vergelijking Word/Excel/PowerPoint ---------- */
+const WORD_EXT = new Set([".docx", ".docm", ".dotx", ".dotm"]);
+const XLS_EXT = new Set([".xlsx", ".xlsm", ".xltx", ".xltm"]);
+const PPT_EXT = new Set([".pptx", ".pptm", ".potx", ".potm", ".ppsx"]);
+const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+const S_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+const A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main";
+const R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+const kanVergelijken = ext => WORD_EXT.has(ext) || XLS_EXT.has(ext) || PPT_EXT.has(ext);
+
+function vergelijkBlok(g) {
+  const ext = splitExt(g.items[0].naam)[1].toLowerCase();
+  const letters = [...new Set(g.items.filter(x => x.hash).map(x => vl(g, x)))].sort();
+  if (letters.length < 2) return "";
+  if (!kanVergelijken(ext))
+    return `<div class="vergelijk"><span class="hint" style="margin:0">Inhoudelijk vergelijken kan voor Word (.docx), Excel (.xlsx) en PowerPoint (.pptx). Oudere formaten (.doc, .xls, .ppt) en pdf's niet; open de bestanden via de paden.</span></div>`;
+  const sel = (id, def) => `<select id="${id}">${letters.map(l => `<option ${l === def ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+  const keuze = letters.length > 2
+    ? `Variant ${sel("va_" + g.id, letters[0])} met variant ${sel("vb_" + g.id, letters[1])}`
+    : `Variant ${letters[0]} met variant ${letters[1]}`;
+  return `<div class="vergelijk">${keuze} <button class="klein vergelijkKnop" data-g="${g.id}">Inhoud vergelijken</button></div>
+    <div class="diffres" id="diff_${g.id}">${state.diffs.get(g.sleutel) || ""}</div>`;
+}
+
+async function doVergelijk(g) {
+  const letters = [...new Set(g.items.filter(x => x.hash).map(x => vl(g, x)))].sort();
+  const la = $("va_" + g.id) ? $("va_" + g.id).value : letters[0];
+  const lb = $("vb_" + g.id) ? $("vb_" + g.id).value : letters[1];
+  const doel = $("diff_" + g.id);
+  if (la === lb) { doel.innerHTML = `<div class="fout">Kies twee verschillende varianten.</div>`; return; }
+  const xa = gesorteerd(g).find(x => vl(g, x) === la), xb = gesorteerd(g).find(x => vl(g, x) === lb);
+  doel.innerHTML = `<div class="hint">Bezig met vergelijken...</div>`;
+  let html;
+  try {
+    if (typeof DecompressionStream === "undefined") throw new Error("deze browser ondersteunt het uitpakken van Office-bestanden niet; gebruik een actuele versie van Edge of Chrome");
+    html = await vergelijkBestanden(xa, xb, la, lb);
+  } catch (e) {
+    html = `<div class="fout" style="padding:6px 0">Vergelijken niet mogelijk: ${esc((e && e.message) || e)}. Mogelijk is een bestand met een wachtwoord beveiligd, beschadigd of in een ouder formaat opgeslagen.</div>`;
+  }
+  state.diffs.set(g.sleutel, html);
+  doel.innerHTML = html;
+}
+
+async function unzip(buf) {
+  const u8 = new Uint8Array(buf), dv = new DataView(buf), dec = new TextDecoder();
+  let eocd = -1;
+  for (let i = u8.length - 22; i >= Math.max(0, u8.length - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) throw new Error("geen geldige Office Open XML-structuur gevonden (mogelijk met wachtwoord beveiligd)");
+  const n = dv.getUint16(eocd + 10, true); let p = dv.getUint32(eocd + 16, true);
+  const entries = new Map();
+  for (let k = 0; k < n && p + 46 <= u8.length; k++) {
+    if (dv.getUint32(p, true) !== 0x02014b50) break;
+    const nl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true);
+    entries.set(dec.decode(u8.subarray(p + 46, p + 46 + nl)), { method: dv.getUint16(p + 10, true), csize: dv.getUint32(p + 20, true), off: dv.getUint32(p + 42, true) });
+    p += 46 + nl + xl + cl;
+  }
+  return {
+    namen: [...entries.keys()],
+    async tekst(naam) {
+      const e = entries.get(naam); if (!e) return null;
+      const start = e.off + 30 + dv.getUint16(e.off + 26, true) + dv.getUint16(e.off + 28, true);
+      const data = u8.subarray(start, start + e.csize);
+      if (e.method === 0) return dec.decode(data);
+      if (e.method !== 8) throw new Error("niet-ondersteunde compressiemethode");
+      const out = await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream("deflate-raw"))).arrayBuffer();
+      return dec.decode(out);
+    }
+  };
+}
+const parseXml = t => new DOMParser().parseFromString(t, "application/xml");
+const relDoel = (basis, t) => t.startsWith("/") ? t.slice(1) : basis + t.replace(/^\.\//, "");
+
+/* Word: alinea's als tekstregels (bijgehouden wijzigingen worden als geaccepteerd gelezen) */
+function alineas(xml) {
+  const res = [];
+  for (const p of parseXml(xml).getElementsByTagNameNS(W_NS, "p")) {
+    let fb = false; for (let a = p.parentNode; a && a.nodeType === 1; a = a.parentNode) if (a.localName === "Fallback") { fb = true; break; }
+    if (fb) continue;
+    let t = "";
+    const loop = n => {
+      for (const c of n.childNodes) {
+        if (c.nodeType !== 1) continue;
+        const ln = c.localName;
+        if (ln === "Fallback" || ln === "pPr" || ln === "rPr" || ln === "delText" || ln === "instrText") continue;
+        if (c.namespaceURI === W_NS) {
+          if (ln === "p") continue;
+          if (ln === "t") { t += c.textContent; continue; }
+          if (ln === "tab") { t += "\t"; continue; }
+          if (ln === "br" || ln === "cr") { t += " "; continue; }
+        }
+        loop(c);
+      }
+    };
+    loop(p);
+    t = t.replace(/\s+/g, " ").trim();
+    if (t) res.push(t);
+  }
+  return res;
+}
+async function docxDelen(z) {
+  const lees = async naam => { const x = await z.tekst(naam); return x ? alineas(x) : []; };
+  const meer = async namen => { let r = []; for (const n of namen) r = r.concat(await lees(n)); return r; };
+  return [
+    ["Hoofdtekst", await lees("word/document.xml")],
+    ["Kop- en voetteksten", await meer(z.namen.filter(n => /^word\/(header|footer)\d*\.xml$/.test(n)).sort())],
+    ["Voet- en eindnoten", await meer(["word/footnotes.xml", "word/endnotes.xml"])],
+    ["Opmerkingen (commentaar)", await lees("word/comments.xml")]
+  ];
+}
+async function heeftRevisies(z) {
+  const x = await z.tekst("word/document.xml");
+  return !!x && /<w:(ins|del|moveFrom|moveTo)\b/.test(x);
+}
+
+/* PowerPoint: tekst per dia in presentatievolgorde */
+async function pptxDelen(z) {
+  const rels = new Map();
+  const rx = await z.tekst("ppt/_rels/presentation.xml.rels");
+  if (rx) for (const r of parseXml(rx).getElementsByTagNameNS("*", "Relationship")) rels.set(r.getAttribute("Id"), r.getAttribute("Target"));
+  let paden = [];
+  const pres = await z.tekst("ppt/presentation.xml");
+  if (pres) for (const s of parseXml(pres).getElementsByTagNameNS("*", "sldId")) { const t = rels.get(s.getAttributeNS(R_NS, "id")); if (t) paden.push(relDoel("ppt/", t)); }
+  if (!paden.length) paden = z.namen.filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n)).sort((a, b) => +a.match(/(\d+)\.xml$/)[1] - +b.match(/(\d+)\.xml$/)[1]);
+  const regels = [];
+  for (let i = 0; i < paden.length; i++) {
+    regels.push(`[Dia ${i + 1}]`);
+    const x = await z.tekst(paden[i]); if (!x) continue;
+    for (const p of parseXml(x).getElementsByTagNameNS(A_NS, "p")) {
+      const t = [...p.getElementsByTagNameNS(A_NS, "t")].map(e => e.textContent).join("").replace(/\s+/g, " ").trim();
+      if (t) regels.push(t);
+    }
+  }
+  return [["Tekst op de dia's", regels]];
+}
+
+/* Excel: celwaarden per blad, datums herkend via celopmaak */
+const DATUM_IDS = new Map([[14, "datum"], [15, "datum"], [16, "datum"], [17, "datum"], [18, "tijd"], [19, "tijd"], [20, "tijd"], [21, "tijd"], [22, "datumtijd"], [45, "tijd"], [46, "tijd"], [47, "tijd"]]);
+async function datumStijlen(z) {
+  const res = []; const x = await z.tekst("xl/styles.xml"); if (!x) return res;
+  const d = parseXml(x); const custom = new Map();
+  for (const nf of d.getElementsByTagNameNS(S_NS, "numFmt")) custom.set(+nf.getAttribute("numFmtId"), nf.getAttribute("formatCode") || "");
+  const cx = d.getElementsByTagNameNS(S_NS, "cellXfs")[0]; if (!cx) return res;
+  for (const xf of cx.getElementsByTagNameNS(S_NS, "xf")) {
+    const id = +xf.getAttribute("numFmtId"); let soort = DATUM_IDS.get(id) || null;
+    if (!soort && custom.has(id)) {
+      const c = custom.get(id).replace(/"[^"]*"/g, "").replace(/\[[^\]]*\]/g, "").replace(/\\./g, "").toLowerCase();
+      const heeftT = /[hs]/.test(c), heeftD = /[dy]/.test(c) || (/m/.test(c) && !heeftT);
+      if (heeftD || heeftT) soort = heeftD && heeftT ? "datumtijd" : heeftD ? "datum" : "tijd";
+    }
+    res.push(soort);
+  }
+  return res;
+}
+function serieelNaarTekst(v, soort) {
+  const n = +v; if (!isFinite(n)) return v;
+  const d = new Date(Math.round((n - 25569) * 86400000)), p = x => String(x).padStart(2, "0");
+  const dat = `${p(d.getUTCDate())}-${p(d.getUTCMonth() + 1)}-${d.getUTCFullYear()}`;
+  const tijd = `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}` + (d.getUTCSeconds() ? ":" + p(d.getUTCSeconds()) : "");
+  return soort === "datum" ? dat : soort === "tijd" ? tijd : `${dat} ${tijd}`;
+}
+async function xlsxBladen(z) {
+  const ss = [];
+  const sx = await z.tekst("xl/sharedStrings.xml");
+  if (sx) for (const si of parseXml(sx).getElementsByTagNameNS(S_NS, "si")) {
+    let t = ""; for (const te of si.getElementsByTagNameNS(S_NS, "t")) if (te.parentNode.localName !== "rPh") t += te.textContent;
+    ss.push(t);
+  }
+  const stijlen = await datumStijlen(z);
+  const rels = new Map();
+  const rx = await z.tekst("xl/_rels/workbook.xml.rels");
+  if (rx) for (const r of parseXml(rx).getElementsByTagNameNS("*", "Relationship")) rels.set(r.getAttribute("Id"), r.getAttribute("Target"));
+  const bladen = new Map();
+  const wb = await z.tekst("xl/workbook.xml"); if (!wb) throw new Error("werkmap niet gevonden");
+  for (const sh of parseXml(wb).getElementsByTagNameNS(S_NS, "sheet")) {
+    const tgt = rels.get(sh.getAttributeNS(R_NS, "id")); if (!tgt) continue;
+    const x = await z.tekst(relDoel("xl/", tgt)); const cellen = new Map();
+    if (x) for (const c of parseXml(x).getElementsByTagNameNS(S_NS, "c")) {
+      const t = c.getAttribute("t"), vEl = c.getElementsByTagNameNS(S_NS, "v")[0], fEl = c.getElementsByTagNameNS(S_NS, "f")[0];
+      let v = vEl ? vEl.textContent : "";
+      if (t === "s") v = ss[+v] ?? "";
+      else if (t === "inlineStr") v = [...c.getElementsByTagNameNS(S_NS, "t")].map(e => e.textContent).join("");
+      else if (t === "b") v = v === "1" ? "WAAR" : "ONWAAR";
+      else if ((!t || t === "n") && v !== "") { const soort = stijlen[+(c.getAttribute("s") || 0)]; if (soort) v = serieelNaarTekst(v, soort); }
+      const f = fEl && fEl.textContent ? "=" + fEl.textContent : "";
+      if (v === "" && !f) continue;
+      cellen.set(c.getAttribute("r"), { v, f });
+    }
+    bladen.set(sh.getAttribute("name"), cellen);
+  }
+  return bladen;
+}
+function refDelen(ref) { const m = /^([A-Z]+)(\d+)$/.exec(ref) || ["", "A", "0"]; let k = 0; for (const ch of m[1]) k = k * 26 + ch.charCodeAt(0) - 64; return [+m[2], k]; }
+const refSort = (a, b) => { const [ra, ka] = refDelen(a), [rb, kb] = refDelen(b); return ra - rb || ka - kb; };
+
+/* Documenteigenschappen */
+async function metaGegevens(z) {
+  const m = new Map();
+  const core = await z.tekst("docProps/core.xml");
+  const datum = s => { const d = new Date(s); return isNaN(d) ? s : fmtDatum(d.getTime()); };
+  if (core) {
+    const d = parseXml(core);
+    for (const [k, l, isD] of [["title", "Titel"], ["creator", "Auteur"], ["lastModifiedBy", "Laatst gewijzigd door"], ["created", "Gemaakt op", 1], ["modified", "Laatst opgeslagen op", 1], ["revision", "Revisienummer"]]) {
+      const e = d.getElementsByTagNameNS("*", k)[0]; const v = e ? e.textContent : "";
+      m.set(l, isD && v ? datum(v) : v);
+    }
+  }
+  const app = await z.tekst("docProps/app.xml");
+  if (app) { const d = parseXml(app); for (const [k, l] of [["Application", "Programma"], ["AppVersion", "Programmaversie"], ["Pages", "Pagina's"], ["Words", "Woorden"], ["Slides", "Dia's"]]) { const e = d.getElementsByTagNameNS("*", k)[0]; if (e) m.set(l, e.textContent); } }
+  return m;
+}
+
+/* Diff-algoritme (LCS na verwijderen gemeenschappelijk begin/einde) */
+function diffSeq(a, b, limiet = 1e7) {
+  let s = 0; while (s < a.length && s < b.length && a[s] === b[s]) s++;
+  let ea = a.length, eb = b.length; while (ea > s && eb > s && a[ea - 1] === b[eb - 1]) { ea--; eb--; }
+  const ops = []; for (let i = 0; i < s; i++) ops.push({ t: "=", a: a[i] });
+  const A = a.slice(s, ea), B = b.slice(s, eb), n = A.length, m = B.length;
+  if (n * m > limiet) { ops.teGroot = true; A.forEach(x => ops.push({ t: "-", a: x })); B.forEach(x => ops.push({ t: "+", b: x })); }
+  else if (n || m) {
+    const Wd = m + 1, L = new Uint32Array((n + 1) * Wd);
+    for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--)
+      L[i * Wd + j] = A[i] === B[j] ? L[(i + 1) * Wd + j + 1] + 1 : Math.max(L[(i + 1) * Wd + j], L[i * Wd + j + 1]);
+    let i = 0, j = 0;
+    while (i < n && j < m) {
+      if (A[i] === B[j]) { ops.push({ t: "=", a: A[i] }); i++; j++; }
+      else if (L[(i + 1) * Wd + j] >= L[i * Wd + j + 1]) ops.push({ t: "-", a: A[i++] });
+      else ops.push({ t: "+", b: B[j++] });
+    }
+    while (i < n) ops.push({ t: "-", a: A[i++] }); while (j < m) ops.push({ t: "+", b: B[j++] });
+  }
+  for (let i = ea; i < a.length; i++) ops.push({ t: "=", a: a[i] });
+  return ops;
+}
+function woordDiff(a, b) {
+  const tok = s => s.match(/\s+|[\p{L}\p{N}_]+|[^\s\p{L}\p{N}_]/gu) || [];
+  const ops = diffSeq(tok(a), tok(b), 4e6);
+  let html = "", cur = "", buf = "";
+  const flush = () => { if (buf) html += cur === "-" ? `<del>${esc(buf)}</del>` : cur === "+" ? `<ins>${esc(buf)}</ins>` : esc(buf); buf = ""; };
+  for (const o of ops) { if (o.t !== cur) { flush(); cur = o.t; } buf += o.t === "+" ? o.b : o.a; }
+  flush();
+  return html;
+}
+function renderOps(ops) {
+  const regels = []; let gew = 0, verw = 0, toe = 0, i = 0;
+  while (i < ops.length) {
+    if (ops[i].t === "=") { regels.push({ t: "eq", html: esc(ops[i].a) }); i++; continue; }
+    const del = [], ins = [];
+    while (i < ops.length && ops[i].t !== "=") { if (ops[i].t === "-") del.push(ops[i].a); else ins.push(ops[i].b); i++; }
+    const k = ops.teGroot ? 0 : Math.min(del.length, ins.length);
+    for (let j = 0; j < k; j++) { regels.push({ t: "mod", html: woordDiff(del[j], ins[j]) }); gew++; }
+    for (let j = k; j < del.length; j++) { regels.push({ t: "del", html: `<del>${esc(del[j])}</del>` }); verw++; }
+    for (let j = k; j < ins.length; j++) { regels.push({ t: "ins", html: `<ins>${esc(ins[j])}</ins>` }); toe++; }
+  }
+  const wijz = regels.map(r => r.t !== "eq");
+  const MARK = { eq: "", mod: "≠", del: "−", ins: "+" };
+  let html = "", skip = 0;
+  const skipHtml = () => { if (skip) html += `<div class="dr skip"><span class="dm"></span><span>… ${skip} ongewijzigde regel${skip === 1 ? "" : "s"} …</span></div>`; skip = 0; };
+  regels.forEach((r, idx) => {
+    if (!(wijz[idx] || wijz[idx - 1] || wijz[idx + 1]) && !/^\[Dia \d+\]$/.test(r.html)) { skip++; return; }
+    skipHtml();
+    html += `<div class="dr ${r.t}"><span class="dm">${MARK[r.t]}</span><span>${r.html}</span></div>`;
+  });
+  skipHtml();
+  return { html, gew, verw, toe };
+}
+
+async function vergelijkBestanden(xa, xb, la, lb) {
+  const ext = splitExt(xa.naam)[1].toLowerCase();
+  const [za, zb] = await Promise.all([unzip(await xa.file.arrayBuffer()), unzip(await xb.file.arrayBuffer())]);
+  let html = `<div class="diffkop">Variant <b>${esc(la)}</b> (${esc(xa.pad)}, ${esc(fmtDatum(xa.gewijzigd))}) vergeleken met variant <b>${esc(lb)}</b> (${esc(xb.pad)}, ${esc(fmtDatum(xb.gewijzigd))}).<br>
+    <del>Rood doorgehaald</del> = alleen in ${esc(la)}; <ins>groen</ins> = alleen in ${esc(lb)}.</div>`;
+  let geenVerschil = false;
+
+  if (WORD_EXT.has(ext) || PPT_EXT.has(ext)) {
+    const isWord = WORD_EXT.has(ext);
+    if (isWord) {
+      const [ra, rb] = await Promise.all([heeftRevisies(za), heeftRevisies(zb)]);
+      const met = [ra ? la : "", rb ? lb : ""].filter(Boolean);
+      if (met.length) html += `<div class="diffwaarsch">Variant ${met.map(esc).join(" en ")} bevat nog bijgehouden wijzigingen. Deze zijn vergeleken alsof ze zijn geaccepteerd.</div>`;
+    }
+    const [da, db] = await Promise.all(isWord ? [docxDelen(za), docxDelen(zb)] : [pptxDelen(za), pptxDelen(zb)]);
+    let tot = { gew: 0, verw: 0, toe: 0 }, delen = "", teGroot = false;
+    da.forEach(([titel, a], i) => {
+      const ops = diffSeq(a, db[i][1]);
+      if (!ops.some(o => o.t !== "=")) return;
+      if (ops.teGroot) teGroot = true;
+      const r = renderOps(ops); tot.gew += r.gew; tot.verw += r.verw; tot.toe += r.toe;
+      delen += `<h4>${esc(titel)}</h4>${r.html}`;
+    });
+    if (teGroot) html += `<div class="diffwaarsch">De documenten verschillen te sterk voor een regel-voor-regelvergelijking. Het afwijkende deel is volledig als verwijderd en toegevoegd weergegeven.</div>`;
+    if (delen) html += `<div><b>Tekstverschillen:</b> ${tot.gew} ${isWord ? "alinea('s)" : "regel(s)"} gewijzigd, ${tot.verw} alleen in ${esc(la)}, ${tot.toe} alleen in ${esc(lb)}.</div>${delen}`;
+    else geenVerschil = true;
+  } else {
+    const [A, B] = await Promise.all([xlsxBladen(za), xlsxBladen(zb)]);
+    const alleenA = [...A.keys()].filter(n => !B.has(n)), alleenB = [...B.keys()].filter(n => !A.has(n));
+    const rijen = [];
+    const celTekst = c => !c ? "(leeg)" : c.f ? `${c.f}  →  ${c.v}` : c.v;
+    for (const [naam, ca] of A) {
+      const cb = B.get(naam); if (!cb) continue;
+      for (const ref of [...new Set([...ca.keys(), ...cb.keys()])].sort(refSort)) {
+        const x = ca.get(ref), y = cb.get(ref);
+        if ((x ? x.v : "") !== (y ? y.v : "") || (x ? x.f : "") !== (y ? y.f : "")) rijen.push([naam, ref, celTekst(x), celTekst(y)]);
+      }
+    }
+    if (alleenA.length || alleenB.length)
+      html += `<div style="margin:6px 0"><b>Werkbladen:</b> ${alleenA.length ? `alleen in ${esc(la)}: ${alleenA.map(esc).join(", ")}. ` : ""}${alleenB.length ? `alleen in ${esc(lb)}: ${alleenB.map(esc).join(", ")}.` : ""}</div>`;
+    if (rijen.length) {
+      const MAX = 500;
+      html += `<div style="margin:6px 0"><b>Celverschillen:</b> ${rijen.length} cel(len) verschillen${rijen.length > MAX ? `; de eerste ${MAX} worden getoond` : ""}. Opmaak (kleuren, lettertypen, kolombreedtes) wordt niet vergeleken.</div>
+        <table><thead><tr><th style="width:18%">Werkblad</th><th style="width:70px">Cel</th><th>Variant ${esc(la)}</th><th>Variant ${esc(lb)}</th></tr></thead><tbody>` +
+        rijen.slice(0, MAX).map(r => `<tr><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td class="verschil">${esc(r[2])}</td><td class="verschil">${esc(r[3])}</td></tr>`).join("") + `</tbody></table>`;
+    } else if (!alleenA.length && !alleenB.length) geenVerschil = true;
+  }
+  if (geenVerschil)
+    html += `<div style="margin:6px 0"><b>Geen verschillen in de ${XLS_EXT.has(ext) ? "celwaarden en formules" : "tekst"} gevonden.</b> Het verschil zit in opmaak, ingesloten objecten, opgeslagen weergave-instellingen of documenteigenschappen. Inhoudelijk lijken de bestanden gelijk.</div>`;
+
+  const [ma, mb] = await Promise.all([metaGegevens(za), metaGegevens(zb)]);
+  const sleutels = [...new Set([...ma.keys(), ...mb.keys()])];
+  if (sleutels.length)
+    html += `<h4>Documenteigenschappen</h4><table><thead><tr><th style="width:22%">Eigenschap</th><th>Variant ${esc(la)}</th><th>Variant ${esc(lb)}</th></tr></thead><tbody>` +
+      sleutels.map(k => { const a = ma.get(k) || "", b = mb.get(k) || "", c = a !== b ? "verschil" : ""; return `<tr><td>${esc(k)}</td><td class="${c}">${esc(a)}</td><td class="${c}">${esc(b)}</td></tr>`; }).join("") + `</tbody></table>`;
+  return html;
+}
+/* ---------- Bestand openen ---------- */
+// Pdf's worden gedownload: de ingebouwde pdf-viewer werkt niet onder de beveiligingsinstelling van deze pagina
+const BEKIJK = {
+  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".bmp": "image/bmp", ".webp": "image/webp",
+  ".txt": "text/plain;charset=utf-8", ".csv": "text/plain;charset=utf-8", ".log": "text/plain;charset=utf-8",
+  ".md": "text/plain;charset=utf-8", ".xml": "text/plain;charset=utf-8", ".json": "text/plain;charset=utf-8"
+};
+function downloadBlob(blob, naam) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = naam; a.style.display = "none";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+function openBestand(pad) {
+  const x = state.res && state.res.opPad.get(pad); if (!x) return;
+  const type = BEKIJK[splitExt(x.naam)[1].toLowerCase()];
+  if (type) {
+    const url = URL.createObjectURL(new Blob([x.file], { type }));
+    const w = window.open(url, "_blank");
+    setTimeout(() => URL.revokeObjectURL(url), 600000);
+    if (w) { meldExport(`${x.naam} geopend in een nieuw tabblad.`); return; }
+  }
+  downloadBlob(x.file, x.naam);
+  meldExport(`${x.naam} is als kopie gedownload; open het via de downloadbalk. Wijzigingen of verwijderen van deze kopie hebben geen effect op het origineel.`);
+}
+
+/* ---------- Export: gedeelde hulpfuncties ---------- */
+const xe = s => String(s == null ? "" : s)
+  .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, "")
+  .replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const jn = b => b ? "ja" : "nee";
+function instellingenLijst(o) {
+  return [
+    ["Hoofdlettergevoelig vergelijken", jn(o.hoofdletter)],
+    ["Extensie meegenomen in naamvergelijking", jn(o.extensie)],
+    ["Kopie-aanduidingen genegeerd", jn(o.kopie)],
+    ["Systeem- en tijdelijke bestanden overgeslagen", jn(o.systeem)],
+    ["Zelfde inhoud met andere naam gezocht (lege bestanden uitgezonderd)", jn(o.inhoud)]
+  ];
+}
+function overbodigeOpslag(r) {
+  let s = 0; for (const m of r.hashSets.values()) { const v = [...m.values()]; s += v[0].grootte * (v.length - 1); }
+  return s;
+}
+const actieTekst = a => a === "verwijderen" ? "Verwijderen" : a === "behouden" ? "Behouden" : "";
+function kenmerk(g, x) {
+  return [x.fout ? "Leesfout: " + x.fout : "", isNieuwste(g, x) ? "nieuwste" : "", gelijkeDatum(g) ? "gelijke wijzigingsdatum" : ""].filter(Boolean).join("; ");
+}
+
+/* ---------- ZIP-bestand (zonder compressie) ---------- */
+const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function maakZip(bestanden, mime) {
+  const enc = new TextEncoder(); const delen = [], centraal = []; let offset = 0;
+  const d = new Date();
+  const tijd = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  const datum = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  for (const b of bestanden) {
+    const naam = enc.encode(b.naam), data = enc.encode(b.inhoud), crc = crc32(data);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
+    lh.setUint16(10, tijd, true); lh.setUint16(12, datum, true); lh.setUint32(14, crc, true);
+    lh.setUint32(18, data.length, true); lh.setUint32(22, data.length, true); lh.setUint16(26, naam.length, true);
+    delen.push(new Uint8Array(lh.buffer), naam, data);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true);
+    ch.setUint16(12, tijd, true); ch.setUint16(14, datum, true); ch.setUint32(16, crc, true);
+    ch.setUint32(20, data.length, true); ch.setUint32(24, data.length, true); ch.setUint16(28, naam.length, true);
+    ch.setUint32(42, offset, true);
+    centraal.push(new Uint8Array(ch.buffer), naam);
+    offset += 30 + naam.length + data.length;
+  }
+  const cd = centraal.reduce((s, x) => s + x.length, 0);
+  const eo = new DataView(new ArrayBuffer(22));
+  eo.setUint32(0, 0x06054b50, true); eo.setUint16(8, bestanden.length, true); eo.setUint16(10, bestanden.length, true);
+  eo.setUint32(12, cd, true); eo.setUint32(16, offset, true);
+  return new Blob([...delen, ...centraal, new Uint8Array(eo.buffer)], { type: mime });
+}
+
+/* ---------- Excel (.xlsx) ---------- */
+function kolLetter(i) { let s = ""; i++; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; }
+function excelDatum(ms) { if (!ms) return null; const off = new Date(ms).getTimezoneOffset() * 60000; return (ms - off) / 86400000 + 25569; }
+function sheetXml(kolommen, rijen) {
+  const kop = kolommen.map((k, i) => `<c r="${kolLetter(i)}1" t="inlineStr" s="1"><is><t>${xe(k.kop)}</t></is></c>`).join("");
+  const body = rijen.map((r, ri) => {
+    const rn = ri + 2;
+    return `<row r="${rn}">` + r.map((v, ci) => {
+      if (v == null || v === "") return "";
+      const ref = kolLetter(ci) + rn, t = kolommen[ci].type || "s";
+      if (t === "n") return `<c r="${ref}" s="2"><v>${v}</v></c>`;
+      if (t === "d") return `<c r="${ref}" s="3"><v>${v}</v></c>`;
+      return `<c r="${ref}" t="inlineStr" s="4"><is><t xml:space="preserve">${xe(v)}</t></is></c>`;
+    }).join("") + `</row>`;
+  }).join("");
+  const filter = rijen.length ? `<autoFilter ref="A1:${kolLetter(kolommen.length - 1)}${rijen.length + 1}"/>` : "";
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${kolommen.map((k, i) => `<col min="${i + 1}" max="${i + 1}" width="${k.breedte}" customWidth="1"/>`).join("")}</cols><sheetData><row r="1">${kop}</row>${body}</sheetData>${filter}</worksheet>`;
+}
+
+function maakXlsx(r, meta) {
+  const basis = [
+    { kop: "Groep", breedte: 8 }, { kop: "Bestandsnaam", breedte: 40 }, { kop: "Variant", breedte: 8 },
+    { kop: "Pad", breedte: 80 }, { kop: "Grootte (bytes)", breedte: 15, type: "n" },
+    { kop: "Gewijzigd", breedte: 17, type: "d" }, { kop: "SHA-256", breedte: 68 },
+    { kop: "Ook in groep", breedte: 14 }, { kop: "Kenmerk", breedte: 30 }
+  ];
+  const rijenVan = (groepen, extra) => groepen.flatMap(g => gesorteerd(g).map(x => [
+    g.id, x.naam, vl(g, x), x.pad, x.grootte, excelDatum(x.gewijzigd), x.hash || "", ookIn(g, x).join(", "), kenmerk(g, x), ...extra(g, x)
+  ]));
+  const opm = g => state.notities.get(g.sleutel) || "";
+  const actieKol = { kop: "Actie (voorstel)", breedte: 18 };
+  const bladen = [{ naam: "Afwijkingen", xml: sheetXml([...basis, actieKol, { kop: "Opmerking / uitkomst vergelijking", breedte: 50 }], rijenVan(r.afw, (g, x) => [actieTekst(actieVan(x.pad)), opm(g)])) }, {
+    naam: "Identieke doublures",
+    xml: sheetXml([...basis, actieKol, { kop: state.identEen ? "Opmerking (algemeen)" : "Opmerking", breedte: 50 }],
+      rijenVan(r.ident, (g, x) => [actieTekst(actieVan(x.pad)), state.identEen ? state.identAlgemeen : opm(g)]))
+  }];
+  if (r.o.inhoud) bladen.push({ naam: "Zelfde inhoud andere naam", xml: sheetXml([...basis, actieKol, { kop: "Opmerking", breedte: 50 }], rijenVan(r.inh, (g, x) => [actieTekst(actieVan(x.pad)), opm(g)])) });
+  if (r.onleesbaar.length) bladen.push({ naam: "Niet leesbaar", xml: sheetXml(
+    [{ kop: "Bestandsnaam", breedte: 40 }, { kop: "Pad", breedte: 80 }, { kop: "Grootte (bytes)", breedte: 15, type: "n" }, { kop: "Gewijzigd", breedte: 17, type: "d" }, { kop: "Foutmelding", breedte: 30 }, { kop: "Opmerking", breedte: 50 }],
+    r.onleesbaar.map(x => [x.naam, x.pad, x.grootte, excelDatum(x.gewijzigd), x.fout || "", state.notities.get("fout:" + x.pad) || ""])) });
+  if (state.nietGekoppeld.length) bladen.push({ naam: "Niet gekoppelde opmerkingen", xml: sheetXml(
+    [{ kop: "Categorie", breedte: 30 }, { kop: "Bestanden", breedte: 90 }, { kop: "Opmerking", breedte: 60 }],
+    state.nietGekoppeld.map(n => [CATNAAM[n.categorie] || "Onbekend", n.paden.join("\n"), n.opmerking])) });
+  const vv = voorgesteldVerwijderen();
+  const toel = [
+    ["Map", meta.map], ["Uitgevoerd", meta.datum],
+    ["Bestanden geanalyseerd", r.totaal], ["Systeembestanden overgeslagen", r.overgeslagen],
+    ["Lege bestanden (0 bytes)", r.leeg], ["Bestanden gehasht", r.gehasht],
+    ["Groepen identieke doublures", r.ident.length],
+    ...(r.o.inhoud ? [["Groepen zelfde inhoud, andere naam", r.inh.length]] : []),
+    ["Groepen zelfde naam, afwijkende inhoud", r.afw.length],
+    ["Niet leesbare bestanden", r.onleesbaar.length],
+    ["Overbodige opslag identieke bestanden (bytes)", overbodigeOpslag(r)],
+    ["Voorgesteld te verwijderen (bestanden)", vv.n],
+    ...(vv.alles ? [["Let op: inhoud(en) waarvan alle exemplaren op verwijderen staan", vv.alles]] : []),
+    ...(state.identEen && state.identAlgemeen ? [["Opmerking identieke doublures (algemeen)", state.identAlgemeen]] : []),
+    ...instellingenLijst(r.o),
+    ["Methode", "Groeperen op bestandsnaam volgens bovenstaande instellingen; daarna SHA-256-hash per bestand. Zelfde variantletter binnen een groep = binair identiek. Voor 'zelfde inhoud, andere naam' worden alleen niet-lege bestanden met een gelijke grootte gehasht."],
+    ["Let op", "Een bestand kan in meer dan één groep voorkomen (kolom 'Ook in groep'). Behoud per inhoud ten minste één exemplaar."]
+  ].map(([a, b]) => [a, String(b)]);
+  bladen.push({ naam: "Toelichting", xml: sheetXml([{ kop: "Onderdeel", breedte: 46 }, { kop: "Waarde", breedte: 100 }], toel) });
+
+  const ns = 'xmlns="http://schemas.openxmlformats.org/package/2006/relationships"';
+  const n = bladen.length;
+  return maakZip([
+    { naam: "[Content_Types].xml", inhoud: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${bladen.map((b, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")}</Types>` },
+    { naam: "_rels/.rels", inhoud: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships ${ns}><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>` },
+    { naam: "xl/workbook.xml", inhoud: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${bladen.map((b, i) => `<sheet name="${xe(b.naam)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("")}</sheets></workbook>` },
+    { naam: "xl/_rels/workbook.xml.rels", inhoud: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships ${ns}>${bladen.map((b, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("")}<Relationship Id="rId${n + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
+    { naam: "xl/styles.xml", inhoud: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="dd-mm-yyyy hh:mm"/></numFmts><fonts count="2"><font><sz val="10"/><name val="Arial"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Arial"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF0B4F8A"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"/><xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment wrapText="1" vertical="top"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Standaard" xfId="0" builtinId="0"/></cellStyles></styleSheet>` },
+    ...bladen.map((b, i) => ({ naam: `xl/worksheets/sheet${i + 1}.xml`, inhoud: b.xml }))
+  ], "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+}
+
+/* ---------- Word-rapport (.docx) ---------- */
+function wRun(c) {
+  const o = typeof c === "object" && c !== null ? c : { t: c };
+  const rpr = (o.font ? `<w:rFonts w:ascii="${o.font}" w:hAnsi="${o.font}" w:cs="${o.font}"/>` : "") + (o.vet ? "<w:b/>" : "") + (o.kleur ? `<w:color w:val="${o.kleur}"/>` : "") + (o.sz ? `<w:sz w:val="${o.sz}"/><w:szCs w:val="${o.sz}"/>` : "");
+  const delen = String(o.t == null ? "" : o.t).split(/\r?\n/);
+  return `<w:r>${rpr ? `<w:rPr>${rpr}</w:rPr>` : ""}${delen.map((t, i) => (i ? "<w:br/>" : "") + `<w:t xml:space="preserve">${xe(t)}</w:t>`).join("")}</w:r>`;
+}
+const wP = (inhoud, stijl, keepNext) => `<w:p>${stijl || keepNext ? `<w:pPr>${stijl ? `<w:pStyle w:val="${stijl}"/>` : ""}${keepNext ? "<w:keepNext/>" : ""}</w:pPr>` : ""}${[].concat(inhoud).map(wRun).join("")}</w:p>`;
+function wTabel(breedtes, kop, rijen, samen) {
+  const rand = `<w:tblBorders>${["top", "left", "bottom", "right", "insideH", "insideV"].map(z => `<w:${z} w:val="single" w:sz="4" w:space="0" w:color="BFC7D1"/>`).join("")}</w:tblBorders>`;
+  const cel = (c, b, opties = {}) => {
+    const o = typeof c === "object" && c !== null ? c : { t: c };
+    const fill = opties.fill || o.fill;
+    return `<w:tc><w:tcPr><w:tcW w:w="${b}" w:type="dxa"/>${fill ? `<w:shd w:val="clear" w:color="auto" w:fill="${fill}"/>` : ""}</w:tcPr>${wP(opties.kop ? { t: o.t, vet: true, kleur: "FFFFFF" } : o, null, opties.kn)}</w:tc>`;
+  };
+  const kopRij = kop ? `<w:tr><w:trPr><w:tblHeader/><w:cantSplit/></w:trPr>${kop.map((k, i) => cel(k, breedtes[i], { kop: true, fill: "0B4F8A", kn: samen && rijen.length > 0 })).join("")}</w:tr>` : "";
+  const body = rijen.map((r, ri) => `<w:tr><w:trPr><w:cantSplit/></w:trPr>${r.map((c, i) => cel(c, breedtes[i], { kn: samen && ri < rijen.length - 1 })).join("")}</w:tr>`).join("");
+  return `<w:tbl><w:tblPr><w:tblW w:w="${breedtes.reduce((s, x) => s + x, 0)}" w:type="dxa"/><w:tblLayout w:type="fixed"/>${rand}<w:tblCellMar><w:top w:w="40" w:type="dxa"/><w:left w:w="80" w:type="dxa"/><w:bottom w:w="40" w:type="dxa"/><w:right w:w="80" w:type="dxa"/></w:tblCellMar></w:tblPr><w:tblGrid>${breedtes.map(b => `<w:gridCol w:w="${b}"/>`).join("")}</w:tblGrid>${kopRij}${body}</w:tbl>`;
+}
+
+function maakDocx(r, meta) {
+  const d = [];
+  const LICHT = "F3F5F8";
+  const KEUZE = "\u2610 behouden   \u2610 verwijderen";
+  let nr = 0;
+  // vanaf hoofdstuk 3 begint elk hoofdstuk op een nieuwe pagina
+  const kop1 = t => { ++nr; d.push(`<w:p><w:pPr><w:pStyle w:val="Heading1"/>${nr >= 3 ? "<w:pageBreakBefore/>" : ""}</w:pPr>${wRun(`${nr}. ${t}`)}</w:p>`); };
+  const punt = (vet, tekst) => d.push(`<w:p><w:pPr><w:ind w:left="284" w:hanging="284"/></w:pPr>${wRun("\u2022  ")}${wRun({ t: vet, vet: true })}${wRun(tekst)}</w:p>`);
+  const lbl = t => ({ t, vet: true, fill: LICHT });
+  const aantalBest = gs => gs.reduce((s, g) => s + g.items.length, 0);
+  const opmerkingBlok = (label, tekst) => { d.push(wP("")); d.push(wTabel([3600, 10970], null, [[lbl(label), tekst || ""]])); };
+  const vv = voorgesteldVerwijderen();
+  const actieCel = x => {
+    const a = actieVan(x.pad);
+    if (a === "verwijderen") return { t: "Verwijderen", vet: true, kleur: "B42318" };
+    if (a === "behouden") return { t: "Behouden", vet: true, kleur: "1D7A3E" };
+    return KEUZE;
+  };
+  const datumCel = (g, x) => fmtDatum(x.gewijzigd) + (isNieuwste(g, x) ? " (nieuwste)" : "");
+
+  d.push(wP(`Rapport doublurecontrole${meta.map ? ": " + meta.map : ""}`, "Title"));
+  d.push(wP(`Opgesteld op ${meta.datum}.`));
+
+  kop1("Samenvatting");
+  d.push(wTabel([5200, 9370], null, [
+    [lbl("Map"), meta.map],
+    [lbl("Bestanden gecontroleerd"), String(r.totaal)],
+    [lbl("Zelfde naam, afwijkende inhoud"), `${r.afw.length} groepen (${aantalBest(r.afw)} bestanden)`],
+    [lbl("Identieke doublures"), `${r.ident.length} groepen (${aantalBest(r.ident)} bestanden)`],
+    ...(r.o.inhoud ? [[lbl("Zelfde inhoud, andere naam"), `${r.inh.length} groepen (${aantalBest(r.inh)} bestanden)`]] : []),
+    [lbl("Niet leesbare bestanden"), String(r.onleesbaar.length)],
+    [lbl("Overbodige opslag door identieke bestanden"), fmtGrootte(overbodigeOpslag(r))],
+    ...(vv.n ? [[lbl("Voorgesteld te verwijderen"), `${vv.n} bestanden (${fmtGrootte(vv.bytes)})`]] : [])
+  ]));
+
+  kop1("Leeswijzer en gevraagde actie");
+  d.push(wP("Dit rapport toont bestanden die dubbel in de map staan. Beoordeel per groep welk bestand behouden blijft en verwijder de overige exemplaren. Waar een voorstel is gedaan, staat dit in de kolom Actie; waar dat niet zo is, kunt u uw keuze aankruisen."));
+  punt("Zelfde naam, afwijkende inhoud: ", "de bestanden zijn niet gelijk. Vergelijk ze eerst en verwijder alleen een versie die inhoudelijk gelijk of aantoonbaar verouderd is. Bestanden met dezelfde variantletter zijn exact gelijk. Een voorgestelde verwijdering staat in de kolom Actie.");
+  punt("Identieke doublures: ", "zelfde naam en exact dezelfde inhoud. Behoud één exemplaar op de juiste plek in de mapstructuur; de overige kunnen worden verwijderd.");
+  if (r.o.inhoud) punt("Zelfde inhoud, andere naam: ", "exact dezelfde inhoud onder een andere bestandsnaam. Behoud één exemplaar met de juiste naam en op de juiste plek.");
+  if (r.onleesbaar.length) punt("Niet leesbare bestanden: ", "deze konden niet worden gecontroleerd. Ga na of ze nog nodig zijn en of ze geopend kunnen worden.");
+  punt("Let op: ", "een bestand kan in meer dan één groep voorkomen (kolom Ook in). Een voorstel geldt per inhoud: van identieke bestanden blijft altijd één exemplaar behouden, mogelijk in een andere groep.");
+
+  const groepTabel = g => wTabel([7570, 1100, 1800, 1700, 2400], ["Pad", "Grootte", "Gewijzigd", "Ook in", "Actie (voorstel)"],
+    gesorteerd(g).map(x => [x.pad, fmtGrootte(x.grootte), datumCel(g, x), ookIn(g, x).join(", "), actieCel(x)]), true);
+
+  kop1("Zelfde naam, afwijkende inhoud");
+  if (!r.afw.length) d.push(wP("Niet aangetroffen."));
+  for (const g of r.afw) {
+    d.push(wP(`${g.id}  ${g.items[0].naam} (${g.items.length} bestanden, ${g.varianten.size} varianten)`, "Heading2"));
+    d.push(wTabel([900, 5770, 1100, 1800, 1800, 1000, 2200], ["Variant", "Pad", "Grootte", "Gewijzigd", "SHA-256 (verkort)", "Ook in", "Actie"],
+      gesorteerd(g).map(x => [
+        { t: vl(g, x), vet: true }, x.pad, fmtGrootte(x.grootte), datumCel(g, x),
+        x.hash ? { t: x.hash.slice(0, 16), font: "Consolas", sz: 16 } : { t: "Leesfout", vet: true, kleur: "B42318" },
+        ookIn(g, x).join(", "), x.hash ? actieCel(x) : "n.v.t."
+      ]), true));
+    opmerkingBlok("Opmerking / uitkomst handmatige vergelijking", state.notities.get(g.sleutel));
+    d.push(wP(""));
+  }
+
+  kop1("Identieke doublures");
+  if (!r.ident.length) d.push(wP("Niet aangetroffen."));
+  else if (state.identEen && state.identAlgemeen) d.push(wTabel([3600, 10970], null, [[lbl("Opmerking"), state.identAlgemeen]]));
+  for (const g of r.ident) {
+    d.push(wP(`${g.id}  ${g.items[0].naam} (${g.items.length} bestanden)`, "Heading2"));
+    d.push(groepTabel(g));
+    if (!state.identEen && state.notities.get(g.sleutel)) opmerkingBlok("Opmerking", state.notities.get(g.sleutel));
+  }
+
+  if (r.o.inhoud) {
+    kop1("Zelfde inhoud, andere naam");
+    if (!r.inh.length) d.push(wP("Niet aangetroffen."));
+    for (const g of r.inh) {
+      d.push(wP(`${g.id}  ${[...new Set(g.items.map(x => x.naam))].join(" | ")} (${g.items.length} bestanden)`, "Heading2"));
+      d.push(groepTabel(g));
+      if (state.notities.get(g.sleutel)) opmerkingBlok("Opmerking", state.notities.get(g.sleutel));
+    }
+  }
+
+  if (r.onleesbaar.length) {
+    kop1("Niet leesbare bestanden");
+    d.push(wTabel([6070, 1100, 1800, 2000, 3600], ["Pad", "Grootte", "Gewijzigd", "Foutmelding", "Opmerking"],
+      r.onleesbaar.map(x => [x.pad, fmtGrootte(x.grootte), fmtDatum(x.gewijzigd), x.fout || "", state.notities.get("fout:" + x.pad) || ""])));
+  }
+
+  kop1("Werkwijze en instellingen");
+  d.push(wP("Alle bestanden in de map en submappen zijn gegroepeerd op bestandsnaam. Van de bestanden is een SHA-256-hash (digitale vingerafdruk) berekend; bestanden met dezelfde hash zijn exact gelijk. Een afwijkende hash betekent alleen dat de bestanden niet byte-voor-byte gelijk zijn; ook zonder inhoudelijke wijziging kan de hash verschillen, bijvoorbeeld na opnieuw opslaan. Lege bestanden (0 bytes) zijn niet op inhoud met elkaar vergeleken."));
+  d.push(wTabel([5200, 9370], null, instellingenLijst(r.o).map(([a, b]) => [lbl(a), b])));
+
+  const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+  const vRun = t => `<w:r><w:rPr><w:color w:val="52606D"/><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr><w:t xml:space="preserve">${xe(t)}</w:t></w:r>`;
+  const veld = instr => `<w:fldSimple w:instr=" ${instr} ">${vRun("1")}</w:fldSimple>`;
+  const footer = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:ftr ${W}><w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="14570"/></w:tabs></w:pPr>${vRun(`Rapport doublurecontrole${meta.map ? " – " + meta.map : ""} – ${meta.datum}`)}<w:r><w:tab/></w:r>${vRun("Pagina ")}${veld("PAGE")}${vRun(" van ")}${veld("NUMPAGES")}</w:p></w:ftr>`;
+  const document = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${W}><w:body>${d.join("")}<w:sectPr><w:footerReference w:type="default" r:id="rId2"/><w:pgSz w:w="16838" w:h="11906" w:orient="landscape"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+  const kopStijl = (id, naam, lvl, sz) => `<w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${naam}"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:keepNext/><w:spacing w:before="240" w:after="120"/><w:outlineLvl w:val="${lvl}"/></w:pPr><w:rPr><w:b/><w:color w:val="0B4F8A"/><w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/></w:rPr></w:style>`;
+  const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:eastAsia="Arial" w:cs="Arial"/><w:sz w:val="18"/><w:szCs w:val="18"/><w:lang w:val="nl-NL"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="60" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:qFormat/></w:style><w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/><w:pPr><w:spacing w:after="120"/></w:pPr><w:rPr><w:b/><w:color w:val="0B4F8A"/><w:sz w:val="32"/><w:szCs w:val="32"/></w:rPr></w:style>${kopStijl("Heading1", "heading 1", 0, 24)}${kopStijl("Heading2", "heading 2", 1, 20)}</w:styles>`;
+  const ns = 'xmlns="http://schemas.openxmlformats.org/package/2006/relationships"';
+  return maakZip([
+    { naam: "[Content_Types].xml", inhoud: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/><Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/></Types>` },
+    { naam: "_rels/.rels", inhoud: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships ${ns}><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>` },
+    { naam: "word/_rels/document.xml.rels", inhoud: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships ${ns}><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/></Relationships>` },
+    { naam: "word/document.xml", inhoud: document },
+    { naam: "word/styles.xml", inhoud: styles },
+    { naam: "word/footer1.xml", inhoud: footer }
+  ], "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+}
+
+/* ---------- Opslaan ---------- */
+async function bewaar(blob, naam, beschrijving, mime, ext) {
+  let inIframe = true; try { inIframe = window.self !== window.top; } catch (e) {}
+  if (window.showSaveFilePicker && !inIframe) {
+    try {
+      const h = await window.showSaveFilePicker({ suggestedName: naam, types: [{ description: beschrijving, accept: { [mime]: [ext] } }] });
+      const w = await h.createWritable(); await w.write(blob); await w.close();
+      meldExport(`Opgeslagen als ${h.name}.`); return true;
+    } catch (e) {
+      if (e && e.name === "AbortError") { meldExport("Opslaan geannuleerd."); return false; }
+    }
+  }
+  downloadBlob(blob, naam);
+  meldExport(`Download gestart: ${naam}. Controleer de downloadbalk van de browser.`);
+  return true;
+}
+function stempel() { const nu = new Date(), p = n => String(n).padStart(2, "0"); return `${nu.getFullYear()}${p(nu.getMonth() + 1)}${p(nu.getDate())}_${p(nu.getHours())}${p(nu.getMinutes())}`; }
+const veiligeNaam = s => (s || "map").replace(/[\\/:*?"<>|]+/g, "_").slice(0, 60);
+
+async function exporteer(soort) {
+  const r = state.res;
+  if (!r) { meldExport("Voer eerst een analyse uit.", true); return; }
+  try {
+    const meta = { map: state.mapNaam, datum: new Date().toLocaleString("nl-NL", { dateStyle: "short", timeStyle: "short" }) };
+    const vv = voorgesteldVerwijderen();
+    const ok = soort === "xlsx"
+      ? await bewaar(maakXlsx(r, meta), `doublurecontrole_${veiligeNaam(state.mapNaam)}_${stempel()}.xlsx`, "Excel-werkmap", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ".xlsx")
+      : await bewaar(maakDocx(r, meta), `rapport_doublurecontrole_${veiligeNaam(state.mapNaam)}_${stempel()}.docx`, "Word-document", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", ".docx");
+    const extra = [vv.alles ? `van ${vv.alles} inhoud(en) staan alle exemplaren op verwijderen` : "", state.nietGekoppeld.length ? `${state.nietGekoppeld.length} niet gekoppelde opmerking(en) zijn niet in ${soort === "xlsx" ? "de groepen" : "het rapport"} opgenomen` : ""].filter(Boolean);
+    if (ok && extra.length) meldExport($("exportStatus").textContent + " Let op: " + extra.join("; ") + ".", true);
+  } catch (e) { meldExport("Exporteren mislukt: " + ((e && e.message) || e), true); }
+}
+
+/* ---------- Opmerkingen opslaan en laden (.json) ---------- */
+async function voortgangOpslaan() {
+  const r = state.res; if (!r) { meldExport("Voer eerst een analyse uit.", true); return; }
+  const acties = [...state.acties].map(([pad, a]) => ({ pad, actie: a.actie, hash: a.hash }));
+  const data = {
+    tool: "Doublurecontrole", formaat: 2, map: state.mapNaam, opgeslagen: new Date().toISOString(), instellingen: r.o,
+    identiekEenOpmerking: state.identEen, identiekAlgemeneOpmerking: state.identAlgemeen,
+    groepen: notitieLijst(), acties, nietGekoppeld: state.nietGekoppeld
+  };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  if (await bewaar(blob, `doublurecontrole_opmerkingen_${veiligeNaam(state.mapNaam)}_${stempel()}.json`, "Opmerkingen doublurecontrole", "application/json", ".json"))
+    state.gewijzigd = false;
+}
+
+async function voortgangLaden(file) {
+  const r = state.res; if (!r) { meldExport("Analyseer eerst de map en laad daarna de opmerkingen.", true); return; }
+  let data;
+  try { data = JSON.parse(await file.text()); } catch (e) { meldExport("Het gekozen bestand is geen geldig opmerkingenbestand.", true); return; }
+  if (!data || data.tool !== "Doublurecontrole") { meldExport("Het gekozen bestand is geen opmerkingenbestand van deze tool.", true); return; }
+
+  // Formaat 1 (v4) bewaarde opmerkingen bij niet-leesbare bestanden apart
+  const oud = (data.onleesbaar || []).filter(f => f && f.pad).map(f => ({ categorie: "fout", paden: [f.pad], opmerking: f.opmerking }));
+  const k = koppelNotities([...(data.groepen || []), ...oud, ...(data.nietGekoppeld || [])]);
+  const bekend = new Set(state.nietGekoppeld.map(n => JSON.stringify(n)));
+  for (const n of k.niet) if (!bekend.has(JSON.stringify(n))) state.nietGekoppeld.push(n);
+
+  let aOk = 0, aSkip = 0;
+  for (const a of data.acties || []) {
+    const x = r.opPad.get(a.pad);
+    const ok = x && x.hash && (a.actie === "behouden" || a.actie === "verwijderen") && (!a.hash || a.hash === x.hash) && isDoublure(a.pad);
+    // let op: x.hash wordt hier gezet zodat de keuze aan de huidige inhoud is gebonden
+    if (ok) { state.acties.set(a.pad, { actie: a.actie, hash: x.hash }); aOk++; } else aSkip++;
+  }
+  if (typeof data.identiekEenOpmerking === "boolean") state.identEen = data.identiekEenOpmerking;
+  if (data.identiekAlgemeneOpmerking) state.identAlgemeen = state.identAlgemeen && state.identAlgemeen !== data.identiekAlgemeneOpmerking && !state.identAlgemeen.includes(data.identiekAlgemeneOpmerking) ? state.identAlgemeen + "\n" + data.identiekAlgemeneOpmerking : data.identiekAlgemeneOpmerking;
+
+  const verschilInst = data.instellingen && JSON.stringify(data.instellingen) !== JSON.stringify(r.o);
+  markeerGewijzigd();
+  toon();
+  meldExport(`Geladen: ${k.exact} opmerking(en) exact gekoppeld` +
+    (k.deels ? `, ${k.deels} gekoppeld aan een gewijzigde groep (controleer deze)` : "") +
+    (k.niet.length ? `, ${k.niet.length} niet te koppelen (zie tab Niet gekoppelde opmerkingen)` : "") +
+    `; ${aOk} keuze(s) overgenomen` + (aSkip ? `, ${aSkip} keuze(s) overgeslagen omdat het bestand ontbreekt, gewijzigd is of geen doublure meer is` : "") + "." +
+    (data.map && data.map !== state.mapNaam ? ` Let op: opgeslagen bij map "${data.map}", huidige map is "${state.mapNaam}".` : "") +
+    (verschilInst ? " Let op: de opgeslagen analyse-instellingen wijken af van de huidige; daardoor kunnen groepen anders zijn samengesteld." : ""),
+    !!(k.deels || k.niet.length || aSkip || verschilInst));
+}
+
+/* ---------- Events ---------- */
+$("kiezer").addEventListener("change", e => {
+  const bestanden = Array.from(e.target.files);
+  e.target.value = "";
+  if (!bestanden.length) return;
+  const eerste = bestanden[0];
+  const map = eerste.webkitRelativePath ? eerste.webkitRelativePath.split("/")[0] : "";
+  const nieuweMap = !state.res || map !== state.mapNaam;
+  const heeftInvoer = state.notities.size || state.acties.size || state.identAlgemeen || state.nietGekoppeld.length;
+  if (state.res && nieuweMap && heeftInvoer && state.gewijzigd &&
+      !confirm(`U kiest een andere map ("${map}"). Niet-opgeslagen opmerkingen en voorstellen bij "${state.mapNaam}" gaan verloren. Doorgaan?`)) return;
+  analyseer(bestanden, map, nieuweMap);
+});
+$("opnieuw").onclick = () => analyseer(state.bestanden, state.mapNaam, false);
+$("stop").onclick = () => { state.stop = true; if (state.stopSein) state.stopSein(); };
+$("filter").addEventListener("input", () => state.res && toonLijst());
+$("tabs").addEventListener("click", e => { const b = e.target.closest(".tab"); if (!b) return; state.tab = b.dataset.tab; toonTabs(); toonLijst(); });
+$("alleOpen").onclick = () => document.querySelectorAll("details.groep").forEach(d => d.open = true);
+$("alleDicht").onclick = () => document.querySelectorAll("details.groep").forEach(d => d.open = false);
+$("exportXlsx").onclick = () => exporteer("xlsx");
+$("exportRapport").onclick = () => exporteer("docx");
+$("voortgangOpslaan").onclick = voortgangOpslaan;
+$("voortgangLaden").onclick = () => { if (!state.res) { meldExport("Analyseer eerst de map en laad daarna de opmerkingen.", true); return; } $("importKiezer").click(); };
+$("importKiezer").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if (f) voortgangLaden(f); });
+
+const L = $("lijst");
+L.addEventListener("toggle", e => { const d = e.target; if (d.matches && d.matches("details.groep")) state.open.set(d.dataset.sleutel, d.open); }, true);
+L.addEventListener("click", e => {
+  const a = e.target.closest("a.open"); if (a) { e.preventDefault(); openBestand(a.dataset.pad); return; }
+  const v = e.target.closest(".vergelijkKnop"); if (v) { doVergelijk(state.res.perId.get(v.dataset.g)); return; }
+  const nk = e.target.closest(".nkWeg");
+  if (nk) {
+    state.nietGekoppeld.splice(+nk.dataset.i, 1); markeerGewijzigd();
+    if (!state.nietGekoppeld.length) state.tab = "afw";
+    toonTabs(); toonLijst(); return;
+  }
+  if (e.target.id === "voorstelToepassen") { voorstelToepassen(); return; }
+  if (e.target.id === "voorstelWissen") {
+    if (!state.acties.size || confirm("Alle keuzes behouden/verwijderen wissen?")) { state.acties = new Map(); markeerGewijzigd(); toonKaarten(); toonLijst(); }
+  }
+});
+L.addEventListener("input", e => {
+  const t = e.target;
+  if (t.id === "identAlgemeen") { state.identAlgemeen = t.value; markeerGewijzigd(); return; }
+  if (t.dataset && t.dataset.sleutel) {
+    if (t.value.trim()) state.notities.set(t.dataset.sleutel, t.value); else state.notities.delete(t.dataset.sleutel);
+    markeerGewijzigd();
+    if (t.dataset.g) werkGroepStatusBij(state.res.perId.get(t.dataset.g));
+  }
+});
+L.addEventListener("change", e => {
+  const t = e.target;
+  if (t.id === "identEen") { state.identEen = t.checked; markeerGewijzigd(); toonLijst(); return; }
+  if (t.matches("select.actie")) {
+    zetActie(t.dataset.pad, t.value);
+    markeerGewijzigd(); werkInhoudBij(t.dataset.pad); toonKaarten();
+  }
+});
+window.addEventListener("beforeunload", e => { if (state.gewijzigd) { e.preventDefault(); e.returnValue = ""; } });
+try { if (window.self !== window.top) $("iframeWaarschuwing").style.display = "block"; } catch (e) { $("iframeWaarschuwing").style.display = "block"; }
+</script>
+</body></html>
