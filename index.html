@@ -5,7 +5,7 @@
 <!-- Blokkeert alle netwerkverkeer: de tool werkt uitsluitend lokaal in de browser -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Doublurecontrole map (v9)</title>
+<title>Doublurecontrole map (v9.1)</title>
 <style>
   :root { --blauw:#0b4f8a; --grijs:#f3f5f8; --rand:#d6dce4; --rood:#b42318; --roodlicht:#fdecea; --groen:#1d7a3e; --groenlicht:#e8f5ec; --oranje:#b54708; --oranjelicht:#fff4e5; }
   * { box-sizing: border-box; }
@@ -99,6 +99,9 @@
   .opties code { background: #fff; border: 1px solid var(--rand); border-radius: 3px; padding: 0 3px; font-size: 12px; }
   button:focus-visible, .knop:focus-visible, .tab:focus-visible { outline: 2px solid #f5a623; outline-offset: 2px; }
   .knop.uit { opacity: .45; cursor: default; }
+  label.vinkje { display: flex; gap: 6px; align-items: center; cursor: pointer; font-size: 13px; }
+  #instellingenVoorstel { display: none; background: var(--oranjelicht); border: 1px solid var(--oranje); border-radius: 4px; padding: 8px 10px; margin: 0 0 12px; font-size: 13px; }
+  #instellingenVoorstel ul { margin: 4px 0 8px; padding-left: 20px; }
   tr.hc-fout td { background: #fff5f4; }
   tr.hc-let td { background: #fffaf2; }
   tr.hc-ok td { background: #f3faf5; }
@@ -110,7 +113,7 @@
 </head>
 <body>
 <header>
-  <h1>Doublurecontrole map <span id="versieLabel" style="font-size:13px;font-weight:400;opacity:.8;margin-left:6px">v9</span></h1>
+  <h1>Doublurecontrole map <span id="versieLabel" style="font-size:13px;font-weight:400;opacity:.8;margin-left:6px">v9.1</span></h1>
   <p>Vergelijkt bestanden in een map (inclusief submappen) op naam en controleert daarna via SHA-256-hash of het om identieke bestanden gaat. Alles draait lokaal in de browser; er wordt niets verzonden.</p>
 </header>
 <main>
@@ -163,15 +166,17 @@
       <button class="secundair" id="voortgangOpslaan">Opmerkingen opslaan</button>
       <button class="secundair" id="voortgangLaden">Opmerkingen laden</button>
       <input type="file" id="importKiezer" accept=".json,application/json">
+      <label class="vinkje" title="Uit: alleen opmerkingen en keuzes laden, zonder tabblad Hercontrole"><input type="checkbox" id="optHercontrole" checked> Hercontrole uitvoeren</label>
     </div>
-    <div class="hint" style="margin:0 0 6px">Hercontrole na het opschonen: kies dezelfde map opnieuw en laad het opmerkingenbestand. Het tabblad Hercontrole toont dan per voorgestelde actie of die is uitgevoerd.</div>
+    <div class="hint" style="margin:0 0 6px">Hercontrole na het opschonen: kies dezelfde map opnieuw en laad het opmerkingenbestand met het vinkje Hercontrole uitvoeren aan. Het tabblad Hercontrole toont dan per voorgestelde actie of die is uitgevoerd.</div>
     <div id="exportStatus" class="hint" style="margin:0 0 12px"></div>
+    <div id="instellingenVoorstel"></div>
     <div id="lijst"></div>
   </section>
 </main>
 <script>
 "use strict";
-const VERSIE = "v9";
+const VERSIE = "v9.1";
 const $ = id => document.getElementById(id);
 const state = {
   bestanden: [], mapNaam: "", res: null, stop: false, tab: "afw", busy: false,
@@ -184,6 +189,7 @@ const state = {
   open: new Map(),
   hercontrole: null,        // resultaat van de hercontrole (na laden van een opmerkingenbestand met keuzes)
   hercontroleBron: null,    // de keuzes uit dat opmerkingenbestand, om na een nieuwe analyse opnieuw te toetsen
+  laatsteImport: null,      // het laatst geladen opmerkingenbestand, voor "instellingen overnemen"
   gewijzigd: false
 };
 const KLEUREN = ["#0b4f8a","#b54708","#6941c6","#1d7a3e","#b42318","#0e7090","#c11574","#4d5761"];
@@ -322,6 +328,8 @@ function zetBezig(b) {
   $("kiezer").disabled = b;
   $("kiezerLabel").classList.toggle("uit", b);
   $("voortgangLaden").disabled = b;
+  $("optHercontrole").disabled = b;
+  const ov = $("instellingenOvernemen"); if (ov) ov.disabled = b;
   $("voortgang").style.display = b ? "block" : "none";
 }
 function startBezig() { state.stop = false; state.stopBelofte = new Promise(res => { state.stopSein = res; }); zetBezig(true); }
@@ -370,6 +378,7 @@ async function analyseer(bestanden, mapNaam, nieuweMap) {
   if (!bestanden.length || state.busy) return;
   if (!(window.crypto && crypto.subtle)) { alert("Deze browser ondersteunt geen hashfunctie (crypto.subtle). Gebruik een actuele versie van Edge of Chrome."); return; }
   const o = leesOpties();
+  toonInstellingenVoorstel(null);
   startBezig();
   $("mapNaam").textContent = `Bezig met map: ${mapNaam} (${bestanden.length.toLocaleString("nl-NL")} bestanden)`;
   $("voortgangTekst").textContent = "Bestanden inventariseren...";
@@ -460,7 +469,7 @@ async function analyseer(bestanden, mapNaam, nieuweMap) {
   if (nieuweMap) {
     state.notities = new Map(); state.acties = new Map(); state.identAlgemeen = ""; state.identEen = true;
     state.nietGekoppeld = []; state.open = new Map(); state.gewijzigd = false;
-    state.hercontrole = null; state.hercontroleBron = null;
+    state.hercontrole = null; state.hercontroleBron = null; state.laatsteImport = null;
   } else {
     let k = { exact: 0, deels: 0, niet: [] };
     if (snapshot) { state.notities = new Map(); k = koppelNotities([...snapshot, ...state.nietGekoppeld]); state.nietGekoppeld = k.niet; }
@@ -477,7 +486,8 @@ async function analyseer(bestanden, mapNaam, nieuweMap) {
   if (state.tab === "inh" && !o.inhoud) state.tab = "afw";
   if (state.tab === "fout" && !onleesbaar.length) state.tab = "afw";
   if (state.tab === "nietgek" && !state.nietGekoppeld.length) state.tab = "afw";
-  if (state.hercontroleBron) await voerHercontroleUit(state.hercontroleBron);
+  if (state.hercontroleBron && hercontroleAan()) await voerHercontroleUit(state.hercontroleBron);
+  else state.hercontrole = null;
   if (state.tab === "herc" && !state.hercontrole) state.tab = "afw";
   toon();
   meldExport(melding, fout);
@@ -1566,9 +1576,11 @@ async function voortgangOpslaan() {
     return { pad, actie: a.actie, hash: a.hash, grootte: x ? x.grootte : a.grootte };
   });
   const data = {
-    tool: "Doublurecontrole", versie: VERSIE, formaat: 3, map: state.mapNaam, opgeslagen: new Date().toISOString(), instellingen: r.o,
+    tool: "Doublurecontrole", versie: VERSIE, formaat: 4, map: state.mapNaam, opgeslagen: new Date().toISOString(), instellingen: r.o,
     identiekEenOpmerking: state.identEen, identiekAlgemeneOpmerking: state.identAlgemeen,
-    groepen: notitieLijst(), acties, nietGekoppeld: state.nietGekoppeld
+    groepen: notitieLijst(), acties, nietGekoppeld: state.nietGekoppeld,
+    // weergave: actief tabblad en welke groepen zijn uit- of ingeklapt (groepsleutel = gesorteerde paden)
+    weergave: { tab: state.tab, groepen: [...state.open].map(([sleutel, open]) => ({ paden: sleutel.split("|"), open })) }
   };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   if (await bewaar(blob, `doublurecontrole_opmerkingen_${veiligeNaam(state.mapNaam)}_${stempel()}.json`, "Opmerkingen doublurecontrole", "application/json", ".json"))
@@ -1576,11 +1588,17 @@ async function voortgangOpslaan() {
 }
 
 async function voortgangLaden(file) {
-  const r = state.res; if (!r) { meldExport("Analyseer eerst de map en laad daarna de opmerkingen.", true); return; }
+  if (!state.res) { meldExport("Analyseer eerst de map en laad daarna de opmerkingen.", true); return; }
   if (state.busy) return;
   let data;
   try { data = JSON.parse(await file.text()); } catch (e) { meldExport("Het gekozen bestand is geen geldig opmerkingenbestand.", true); return; }
   if (!data || data.tool !== "Doublurecontrole") { meldExport("Het gekozen bestand is geen opmerkingenbestand van deze tool.", true); return; }
+  await laadGegevens(data);
+}
+
+async function laadGegevens(data) {
+  const r = state.res;
+  state.laatsteImport = data;
 
   // Formaat 1 (v4) bewaarde opmerkingen bij niet-leesbare bestanden apart
   const oud = (data.onleesbaar || []).filter(f => f && f.pad).map(f => ({ categorie: "fout", paden: [f.pad], opmerking: f.opmerking }));
@@ -1596,23 +1614,60 @@ async function voortgangLaden(file) {
     if (ok) { state.acties.set(a.pad, { actie: a.actie, hash: x.hash }); aOk++; } else aSkip++;
   }
   state.hercontroleBron = { acties: data.acties || [], map: data.map, opgeslagen: data.opgeslagen, versie: data.versie };
-  await voerHercontroleUit(state.hercontroleBron);
+  if (hercontroleAan()) await voerHercontroleUit(state.hercontroleBron); else state.hercontrole = null;
   const hc = state.hercontrole;
+
+  // Weergave terugzetten: uitgeklapte groepen (alleen groepen die nog precies zo bestaan) en het actieve tabblad
+  const w = data.weergave || {};
+  const bestaand = new Set([...r.afw, ...r.ident, ...r.inh].map(g => g.sleutel));
+  for (const g of Array.isArray(w.groepen) ? w.groepen : []) {
+    if (!g || !Array.isArray(g.paden) || typeof g.open !== "boolean") continue;
+    const sl = [...g.paden].sort().join("|");
+    if (bestaand.has(sl)) state.open.set(sl, g.open);
+  }
+  const beschikbaar = new Set(["afw", "ident", ...(r.o.inhoud ? ["inh"] : []), ...(r.onleesbaar.length ? ["fout"] : []), ...(state.nietGekoppeld.length ? ["nietgek"] : []), ...(hc ? ["herc"] : [])]);
   if (hc && (aSkip || hc.geenOverlap)) state.tab = "herc";
+  else if (beschikbaar.has(w.tab)) state.tab = w.tab;
   if (typeof data.identiekEenOpmerking === "boolean") state.identEen = data.identiekEenOpmerking;
   if (data.identiekAlgemeneOpmerking) state.identAlgemeen = state.identAlgemeen && state.identAlgemeen !== data.identiekAlgemeneOpmerking && !state.identAlgemeen.includes(data.identiekAlgemeneOpmerking) ? state.identAlgemeen + "\n" + data.identiekAlgemeneOpmerking : data.identiekAlgemeneOpmerking;
 
   const verschilInst = data.instellingen && instellingenVerschillen(data.instellingen, r.o);
   markeerGewijzigd();
   toon();
+  toonInstellingenVoorstel(verschilInst ? data.instellingen : null);
   meldExport(`Geladen: ${k.exact} opmerking(en) exact gekoppeld` +
     (k.deels ? `, ${k.deels} gekoppeld aan een gewijzigde groep (controleer deze)` : "") +
     (k.niet.length ? `, ${k.niet.length} niet te koppelen (zie tab Niet gekoppelde opmerkingen)` : "") +
-    `; ${aOk} keuze(s) overgenomen` + (aSkip ? `, ${aSkip} keuze(s) overgeslagen omdat het bestand ontbreekt, gewijzigd is of geen doublure meer is (zie tab Hercontrole)` : "") + "." +
+    `; ${aOk} keuze(s) overgenomen` + (aSkip ? `, ${aSkip} keuze(s) overgeslagen omdat het bestand ontbreekt, gewijzigd is of geen doublure meer is (${hc ? "zie tab Hercontrole" : "zet Hercontrole uitvoeren aan voor een overzicht"})` : "") + "." +
     (hc && hc.telling.problemen ? ` Hercontrole: ${hc.geenOverlap ? "geen bestanden uit het opmerkingenbestand teruggevonden" : hc.telling.problemen + " aandachtspunt(en)"}.` : "") +
     (data.map && data.map !== state.mapNaam ? ` Let op: opgeslagen bij map "${data.map}", huidige map is "${state.mapNaam}".` : "") +
-    (verschilInst ? " Let op: de opgeslagen analyse-instellingen wijken af van de huidige; daardoor kunnen groepen anders zijn samengesteld." : ""),
+    (verschilInst ? " Let op: de opgeslagen analyse-instellingen wijken af van de huidige; daardoor kunnen groepen anders zijn samengesteld (zie hieronder)." : ""),
     !!(k.deels || k.niet.length || aSkip || verschilInst || (hc && hc.telling.problemen)));
+}
+
+const hercontroleAan = () => $("optHercontrole").checked;
+const volledigeOpties = o => { const x = { ...STANDAARD_OPTIES, ...(o || {}) }; x.uitsluiten = Array.isArray(x.uitsluiten) ? x.uitsluiten : []; return x; };
+
+// Toont welke opgeslagen instellingen afwijken, met een knop om ze over te nemen. null verbergt het blok.
+function toonInstellingenVoorstel(opgeslagen) {
+  const el = $("instellingenVoorstel");
+  if (!opgeslagen || !state.res) { el.style.display = "none"; el.innerHTML = ""; return; }
+  const nu = new Map(instellingenLijst(state.res.o)), oud = instellingenLijst(volledigeOpties(opgeslagen));
+  const verschil = oud.filter(([k, v]) => nu.get(k) !== v);
+  el.innerHTML = `<b>De instellingen in het opmerkingenbestand wijken af van de huidige:</b><ul>${verschil.map(([k, v]) => `<li>${esc(k)}: opgeslagen <b>${esc(v)}</b>, nu <b>${esc(nu.get(k))}</b></li>`).join("")}</ul>
+    <button class="klein" id="instellingenOvernemen">Instellingen uit opmerkingenbestand overnemen en opnieuw analyseren</button>`;
+  el.style.display = "block";
+}
+async function instellingenOvernemen() {
+  const data = state.laatsteImport; if (!data || !data.instellingen || state.busy || !state.bestanden.length) return;
+  const o = volledigeOpties(data.instellingen);
+  $("optHoofdletter").checked = !!o.hoofdletter; $("optExtensie").checked = !!o.extensie; $("optKopie").checked = !!o.kopie;
+  $("optSysteem").checked = !!o.systeem; $("optInhoud").checked = !!o.inhoud;
+  $("optUitsluiten").value = o.uitsluiten.join(", ");
+  try { localStorage.setItem(UITSLUIT_SLEUTEL, $("optUitsluiten").value); } catch (e) {}
+  await analyseer(state.bestanden, state.mapNaam, false);
+  if (state.stop) return;                       // afgebroken: de vorige resultaten blijven staan
+  await laadGegevens(data);                     // keuzes die eerder niet pasten, opnieuw koppelen
 }
 
 /* ---------- Events ---------- */
@@ -1648,6 +1703,14 @@ $("exportRapport").onclick = () => exporteer("docx");
 $("voortgangOpslaan").onclick = voortgangOpslaan;
 $("voortgangLaden").onclick = () => { if (!state.res) { meldExport("Analyseer eerst de map en laad daarna de opmerkingen.", true); return; } $("importKiezer").click(); };
 $("importKiezer").addEventListener("change", e => { const f = e.target.files[0]; e.target.value = ""; if (f) voortgangLaden(f); });
+$("instellingenVoorstel").addEventListener("click", e => { if (e.target.id === "instellingenOvernemen") instellingenOvernemen(); });
+$("optHercontrole").addEventListener("change", async () => {
+  if (!state.res) return;
+  if (hercontroleAan() && state.hercontroleBron) await voerHercontroleUit(state.hercontroleBron);
+  else state.hercontrole = null;
+  if (state.tab === "herc" && !state.hercontrole) state.tab = "afw";
+  toon();
+});
 
 const L = $("lijst");
 L.addEventListener("toggle", e => { const d = e.target; if (d.matches && d.matches("details.groep")) state.open.set(d.dataset.sleutel, d.open); }, true);
