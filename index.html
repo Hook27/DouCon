@@ -5,7 +5,7 @@
 <!-- Blokkeert alle netwerkverkeer: de tool werkt uitsluitend lokaal in de browser -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; form-action 'none'; base-uri 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Doublurecontrole map (v9.3)</title>
+<title>Doublurecontrole map (v1.0)</title>
 <style>
   :root { --blauw:#0b4f8a; --grijs:#f3f5f8; --rand:#d6dce4; --rood:#b42318; --roodlicht:#fdecea; --groen:#1d7a3e; --groenlicht:#e8f5ec; --oranje:#b54708; --oranjelicht:#fff4e5; }
   * { box-sizing: border-box; }
@@ -135,7 +135,7 @@
 </head>
 <body>
 <header>
-  <h1>Doublurecontrole map <span id="versieLabel">v9.3</span></h1>
+  <h1>Doublurecontrole map <span id="versieLabel">v1.0</span></h1>
   <p title="Vergelijkt bestanden in een map (inclusief submappen) op naam en controleert daarna via SHA-256-hash of het om identieke bestanden gaat.">Zoekt dubbele bestanden op naam en inhoud (SHA-256). Alles draait lokaal in de browser; er wordt niets verzonden.</p>
 </header>
 <main>
@@ -201,7 +201,9 @@
 </main>
 <script>
 "use strict";
-const VERSIE = "v9.3";
+const VERSIE = "v1.0";
+// Vóór v1.0 heetten de versies v8, v9, v9.1 enz.; die heten nu v0.8, v0.9, v0.9.1 enz.
+const toonVersie = v => !v ? "v0.8 of ouder" : /^v(8|9)(\.\d+)*$/.test(v) ? "v0." + v.slice(1) : v;
 const $ = id => document.getElementById(id);
 const state = {
   bestanden: [], mapNaam: "", res: null, stop: false, tab: "afw", busy: false,
@@ -300,10 +302,24 @@ function sha256Stroom() {
   }
   return { update, digest };
 }
-// Bestanden vanaf deze grootte worden in blokken gelezen, zodat er nooit een heel groot bestand in het geheugen staat
-const GROOT = 128 * 1024 * 1024, BLOK = 8 * 1024 * 1024;
+// Hashen in drie stappen, zodat het geheugengebruik begrensd blijft:
+// - tot 128 MB: met de ingebouwde functie van de browser (crypto.subtle), tot 4 tegelijk;
+// - 128 tot 512 MB: ook met crypto.subtle (snel), maar één bestand tegelijk;
+// - vanaf 512 MB: in blokken van 8 MB met de eigen SHA-256, zodat er nooit een heel groot bestand in het geheugen staat.
+// window.DOUCON_TEST kan de grenzen verlagen voor de testsuite.
+const MB = 1024 * 1024, BLOK = 8 * MB;
+const grens = (naam, std) => (window.DOUCON_TEST && window.DOUCON_TEST[naam]) || std;
+let grootSlot = Promise.resolve();                 // zorgt dat bestanden van 128-512 MB één voor één worden ingelezen
 async function hashBestand(file, opVoortgang) {
-  if (file.size < GROOT) return Promise.race([sha256(file), state.stopBelofte]);
+  if (file.size < grens("exclusiefVanaf", 128 * MB)) return Promise.race([sha256(file), state.stopBelofte]);
+  if (file.size < grens("stroomVanaf", 512 * MB)) {
+    const vorige = grootSlot; let vrij; grootSlot = new Promise(r => { vrij = r; });
+    try {
+      await vorige;
+      if (state.stop) return undefined;
+      return await Promise.race([sha256(file), state.stopBelofte]);
+    } finally { vrij(); }
+  }
   const h = sha256Stroom();
   for (let pos = 0; pos < file.size; pos += BLOK) {
     if (state.stop) return undefined;
@@ -405,6 +421,26 @@ async function hashAlles(lijst, label = "Hashen") {
   await Promise.all(Array.from({ length: Math.min(4, N) }, werker));
 }
 
+// Vingerafdruk: SHA-256 over de eerste en laatste 64 KB. Gelijke vingerafdruk betekent nog niet gelijke inhoud,
+// verschillende vingerafdruk wel verschillende inhoud.
+async function vingerafdrukAlles(lijst) {
+  const N = lijst.length; let i = 0, klaar = 0;
+  $("voortgangBalk").max = Math.max(N, 1); $("voortgangBalk").value = 0;
+  async function werker() {
+    while (i < N && !state.stop) {
+      const x = lijst[i++], K = 64 * 1024;
+      try {
+        const kop = new Uint8Array(await x.file.slice(0, K).arrayBuffer()), staart = new Uint8Array(await x.file.slice(Math.max(K, x.grootte - K)).arrayBuffer());
+        const buf = new Uint8Array(kop.length + staart.length); buf.set(kop); buf.set(staart, kop.length);
+        x.vingerafdruk = hex(new Uint8Array(await crypto.subtle.digest("SHA-256", buf)));
+      } catch (e) { x.vingerafdruk = null; }
+      klaar++; $("voortgangBalk").value = klaar;
+      $("voortgangTekst").textContent = `Grote bestanden met dezelfde grootte voorvergelijken: ${klaar} / ${N} - ${x.pad}`;
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(4, N) }, werker));
+}
+
 async function controleerLegeBestanden(lijst) {
   for (const it of lijst) {
     if (state.stop) return;
@@ -437,15 +473,29 @@ async function analyseer(bestanden, mapNaam, nieuweMap) {
   }
   const naamGroepen = [...opNaam.values()].filter(g => g.length > 1);
 
-  // Alleen hashen wat nodig is: naamgroepen + (bij inhoudscontrole) niet-lege bestanden met een gedeelde grootte
+  // Alleen hashen wat nodig is: naamgroepen + (bij inhoudscontrole) niet-lege bestanden met een gedeelde grootte.
+  // Grote bestanden (vanaf 1 MB) met dezelfde grootte worden eerst op begin en eind vergeleken (vingerafdruk);
+  // alleen als die overeenkomt, wordt het hele bestand gehasht.
   const teHashenSet = new Set(naamGroepen.flat());
   if (o.inhoud) {
     const perGrootte = new Map();
-    for (const it of items) if (it.grootte > 0) perGrootte.set(it.grootte, (perGrootte.get(it.grootte) || 0) + 1);
-    for (const it of items) if (it.grootte > 0 && perGrootte.get(it.grootte) > 1) teHashenSet.add(it);
+    for (const it of items) if (it.grootte > 0) { if (!perGrootte.has(it.grootte)) perGrootte.set(it.grootte, []); perGrootte.get(it.grootte).push(it); }
+    const voorFilter = [];
+    for (const [g, lijst] of perGrootte) {
+      if (lijst.length < 2) continue;
+      if (g < grens("vingerafdrukVanaf", MB)) lijst.forEach(x => teHashenSet.add(x)); else voorFilter.push(lijst);
+    }
+    if (voorFilter.length) {
+      await vingerafdrukAlles(voorFilter.flat());
+      for (const lijst of voorFilter) {
+        const perVa = new Map();
+        for (const x of lijst) { const k = x.vingerafdruk || "?" + x.pad; if (!perVa.has(k)) perVa.set(k, []); perVa.get(k).push(x); }
+        for (const [k, l] of perVa) if (l.length > 1 || k[0] === "?") l.forEach(x => teHashenSet.add(x));   // bij een leesfout: gewoon volledig hashen
+      }
+    }
   }
   const teHashen = [...teHashenSet];
-  await hashAlles(teHashen);
+  if (!state.stop) await hashAlles(teHashen);
   // Bestanden die de browser niet kan lezen (bijv. pad te lang) hebben vaak grootte 0 en worden daardoor niet gehasht.
   if (!state.stop) await controleerLegeBestanden(items.filter(x => x.grootte === 0 && x.hash === undefined));
   if (state.stop) {
@@ -636,14 +686,18 @@ async function voerHercontroleUit(bron) {
   // 1. aanwezige bestanden met een keuze die in deze analyse niet zijn gehasht
   const teHashen = new Set(acties.map(a => r.alleOpPad.get(a.pad)).filter(x => x && x.hash === undefined));
   // 2. per inhoud met een keuze 'behouden': staat die inhoud nog ergens? Daarvoor bestanden met dezelfde grootte hashen
-  //    (de grootte staat vanaf v9 in het opmerkingenbestand)
-  const grootteVan = new Map();
+  //    (de grootte staat vanaf v0.9 in het opmerkingenbestand)
+  const grootteVan = new Map(), bekend = new Set(), perGrootte = new Map();
+  for (const x of alle) {
+    if (x.hash) bekend.add(x.hash);
+    if (!perGrootte.has(x.grootte)) perGrootte.set(x.grootte, []); perGrootte.get(x.grootte).push(x);
+  }
   for (const [h, lijst] of perHash) {
     if (!lijst.some(a => a.actie === "behouden")) continue;
     const g = lijst.map(a => a.grootte).find(v => typeof v === "number");
     if (g === undefined) continue;
     grootteVan.set(h, g);
-    if (!alle.some(x => x.hash === h)) for (const x of alle) if (x.grootte === g && x.hash === undefined) teHashen.add(x);
+    if (!bekend.has(h)) for (const x of perGrootte.get(g) || []) if (x.hash === undefined) teHashen.add(x);
   }
   let afgebroken = false;
   if (teHashen.size) {
@@ -700,7 +754,7 @@ async function voerHercontroleUit(bron) {
 }
 function hercontroleBronTekst(h) {
   const i = h.info, d = i.opgeslagen ? Date.parse(i.opgeslagen) : NaN;
-  return `Opmerkingenbestand van map "${i.map || "?"}"${isNaN(d) ? "" : ", opgeslagen op " + fmtDatum(d)} (${i.versie || "v8 of ouder"}), getoetst aan de huidige inhoud van map "${state.mapNaam}".`;
+  return `Opmerkingenbestand van map "${i.map || "?"}"${isNaN(d) ? "" : ", opgeslagen op " + fmtDatum(d)} (${toonVersie(i.versie)}), getoetst aan de huidige inhoud van map "${state.mapNaam}".`;
 }
 function hercontroleSamenvatting(h) {
   const t = h.telling;
@@ -1131,8 +1185,10 @@ async function datumStijlen(z) {
   }
   return res;
 }
-function serieelNaarTekst(v, soort) {
-  const n = +v; if (!isFinite(n)) return v;
+function serieelNaarTekst(v, soort, is1904) {
+  let n = +v; if (!isFinite(n)) return v;
+  if (is1904) n += 1462;                            // 1904-datumsysteem (oude Mac-werkmappen): 1462 dagen later dan 1900
+
   const d = new Date(Math.round((n - 25569) * 86400000)), p = x => String(x).padStart(2, "0");
   const dat = `${p(d.getUTCDate())}-${p(d.getUTCMonth() + 1)}-${d.getUTCFullYear()}`;
   const tijd = `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}` + (d.getUTCSeconds() ? ":" + p(d.getUTCSeconds()) : "");
@@ -1151,23 +1207,46 @@ async function xlsxBladen(z) {
   if (rx) for (const r of parseXml(rx).getElementsByTagNameNS("*", "Relationship")) rels.set(r.getAttribute("Id"), r.getAttribute("Target"));
   const bladen = new Map();
   const wb = await z.tekst("xl/workbook.xml"); if (!wb) throw new Error("werkmap niet gevonden");
-  for (const sh of parseXml(wb).getElementsByTagNameNS(S_NS, "sheet")) {
+  const wbXml = parseXml(wb), wbPr = wbXml.getElementsByTagNameNS(S_NS, "workbookPr")[0];
+  const is1904 = !!wbPr && /^(1|true)$/.test(wbPr.getAttribute("date1904") || "");
+  for (const sh of wbXml.getElementsByTagNameNS(S_NS, "sheet")) {
     const tgt = rels.get(sh.getAttributeNS(R_NS, "id")); if (!tgt) continue;
     const x = await z.tekst(relDoel("xl/", tgt)); const cellen = new Map();
+    const gedeeld = new Map();                      // si -> { formule, ref } van de cel waar de gedeelde formule staat
     if (x) for (const c of parseXml(x).getElementsByTagNameNS(S_NS, "c")) {
       const t = c.getAttribute("t"), vEl = c.getElementsByTagNameNS(S_NS, "v")[0], fEl = c.getElementsByTagNameNS(S_NS, "f")[0];
       let v = vEl ? vEl.textContent : "";
       if (t === "s") v = ss[+v] ?? "";
       else if (t === "inlineStr") v = [...c.getElementsByTagNameNS(S_NS, "t")].map(e => e.textContent).join("");
       else if (t === "b") v = v === "1" ? "WAAR" : "ONWAAR";
-      else if ((!t || t === "n") && v !== "") { const soort = stijlen[+(c.getAttribute("s") || 0)]; if (soort) v = serieelNaarTekst(v, soort); }
-      const f = fEl && fEl.textContent ? "=" + fEl.textContent : "";
+      else if ((!t || t === "n") && v !== "") { const soort = stijlen[+(c.getAttribute("s") || 0)]; if (soort) v = serieelNaarTekst(v, soort, is1904); }
+      let ftekst = fEl ? fEl.textContent : "";
+      // Gedeelde formule: alleen de eerste cel bevat de formule; de andere cellen verwijzen ernaar via si en
+      // krijgen de formule met verschoven celverwijzingen
+      if (fEl && fEl.getAttribute("t") === "shared" && fEl.getAttribute("si") !== null) {
+        const si = fEl.getAttribute("si");
+        if (ftekst) gedeeld.set(si, { formule: ftekst, ref: c.getAttribute("r") });
+        else if (gedeeld.has(si)) { const m = gedeeld.get(si); ftekst = verschuifFormule(m.formule, m.ref, c.getAttribute("r")); }
+      }
+      const f = ftekst ? "=" + ftekst : "";
       if (v === "" && !f) continue;
       cellen.set(c.getAttribute("r"), { v, f });
     }
     bladen.set(sh.getAttribute("name"), cellen);
   }
   return bladen;
+}
+// Verschuift de relatieve celverwijzingen in een formule van cel 'van' naar cel 'naar' (zoals Excel bij gedeelde formules).
+// Absolute delen ($A, $1) en tekst tussen aanhalingstekens blijven ongewijzigd.
+function verschuifFormule(formule, van, naar) {
+  const [r0, k0] = refDelen(van), [r1, k1] = refDelen(naar), dr = r1 - r0, dk = k1 - k0;
+  const kolNr = s => { let k = 0; for (const ch of s) k = k * 26 + ch.charCodeAt(0) - 64; return k; };
+  return formule.split(/("(?:[^"]|"")*")/).map((deel, i) => i % 2 ? deel :
+    deel.replace(/(^|[^A-Za-z0-9_.$])(\$?)([A-Z]{1,3})(\$?)(\d+)(?![A-Za-z0-9_(])/g, (m, voor, dk$, kol, dr$, rij) => {
+      const k = dk$ ? kolNr(kol) : kolNr(kol) + dk, r = dr$ ? +rij : +rij + dr;
+      if (k < 1 || r < 1) return m;
+      return voor + dk$ + kolLetter(k - 1) + dr$ + r;
+    })).join("");
 }
 function refDelen(ref) { const m = /^([A-Z]+)(\d+)$/.exec(ref) || ["", "A", "0"]; let k = 0; for (const ch of m[1]) k = k * 26 + ch.charCodeAt(0) - 64; return [+m[2], k]; }
 const refSort = (a, b) => { const [ra, ka] = refDelen(a), [rb, kb] = refDelen(b); return ra - rb || ka - kb; };
@@ -1665,7 +1744,7 @@ async function laadGegevens(data) {
   const r = state.res;
   state.laatsteImport = data;
 
-  // Formaat 1 (v4) bewaarde opmerkingen bij niet-leesbare bestanden apart
+  // Formaat 1 (v0.4) bewaarde opmerkingen bij niet-leesbare bestanden apart
   const oud = (data.onleesbaar || []).filter(f => f && f.pad).map(f => ({ categorie: "fout", paden: [f.pad], opmerking: f.opmerking }));
   const k = koppelNotities([...(data.groepen || []), ...oud, ...(data.nietGekoppeld || [])]);
   const bekend = new Set(state.nietGekoppeld.map(n => JSON.stringify(n)));

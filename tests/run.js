@@ -7,7 +7,7 @@
  *   npm install
  *   npx playwright install chromium
  *   npm test                 # alle tests behalve het grote bestand
- *   npm test -- --groot      # ook een test met twee bestanden van 130 MB (hashen in blokken)
+ *   npm test -- --groot      # ook een test met twee bestanden van 130 MB
  *
  * De tests maken testmappen aan in een tijdelijke map van het besturingssysteem en ruimen die
  * daarna weer op. Er wordt niets in de repository geschreven.
@@ -70,6 +70,14 @@ const docx = alineas => zip({
   "[Content_Types].xml": '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>',
   "word/document.xml": `<?xml version="1.0"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${alineas.map(a => `<w:p><w:r><w:t>${a}</w:t></w:r></w:p>`).join("")}</w:body></w:document>`
 });
+// Minimale Excel-werkmap; cellen als { ref: "<c ...>...</c>" }, met optioneel 1904-datumsysteem
+const xlsx = (cellen, is1904) => zip({
+  "[Content_Types].xml": '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>',
+  "xl/workbook.xml": `<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${is1904 ? '<workbookPr date1904="1"/>' : ""}<sheets><sheet name="Blad1" sheetId="1" r:id="rId1"/></sheets></workbook>`,
+  "xl/_rels/workbook.xml.rels": '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="worksheet" Target="worksheets/sheet1.xml"/></Relationships>',
+  "xl/styles.xml": '<?xml version="1.0"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>',
+  "xl/worksheets/sheet1.xml": `<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1">${cellen.join("")}</row></sheetData></worksheet>`
+});
 // Leest de bestandsnamen uit een ZIP (voor de controle van de Excel- en Word-exports)
 function zipInhoud(buf) {
   ok(buf.readUInt32LE(0) === 0x04034b50, "bestand begint niet met een ZIP-kop");
@@ -88,6 +96,7 @@ function haalFunctie(naam) {
   const start = SCRIPT.indexOf(`function ${naam}(`); ok(start >= 0, `functie ${naam} niet gevonden`);
   return SCRIPT.slice(start, SCRIPT.indexOf("\n}\n", start) + 2);
 }
+function haalRegel(naam) { const a = SCRIPT.indexOf(`function ${naam}(`); ok(a >= 0, `functie ${naam} niet gevonden`); return SCRIPT.slice(a, SCRIPT.indexOf("\n", a) + 1); }
 function haalTussen(begin, eind) { const a = SCRIPT.indexOf(begin), b = SCRIPT.indexOf(eind, a); ok(a >= 0 && b > a, `codeblok '${begin}' niet gevonden`); return SCRIPT.slice(a, b); }
 
 /* ---------- Testmappen ---------- */
@@ -160,7 +169,7 @@ async function download(p, knop) {
 
   console.log("Eenheidstests");
   await test("SHA-256 in blokken is gelijk aan Node crypto (randgevallen in grootte en blokgrens)", () => {
-    const sha256Stroom = new Function(haalTussen("const hex =", "// Bestanden vanaf deze grootte") + "; return sha256Stroom;")();
+    const sha256Stroom = new Function(haalTussen("const hex =", "// Hashen in drie stappen") + "; return sha256Stroom;")();
     for (const n of [0, 1, 55, 56, 63, 64, 65, 119, 120, 1000, 65536, 1048583])
       for (const stuk of [1, 7, 64, 4096, 1 << 20]) {
         const buf = crypto.randomBytes(n), h = sha256Stroom();
@@ -193,6 +202,23 @@ async function download(p, knop) {
     gelijk(u(x("Top/Concepten/a.txt")), true, "jokerteken Concept*");
     gelijk(u(x("Top/Archief.txt")), false, "een bestand met de naam Archief.txt valt er niet onder");
     gelijk(f.maakUitsluiter(f.parseUitsluiten("  ")), null, "lege lijst sluit niets uit");
+  });
+
+  await test("Gedeelde Excel-formules: celverwijzingen verschuiven", () => {
+    const verschuif = new Function(haalRegel("refDelen") + haalRegel("kolLetter") + haalFunctie("verschuifFormule") + "; return verschuifFormule;")();
+    gelijk(verschuif("A2*2", "B2", "B5"), "A5*2", "relatieve rij");
+    gelijk(verschuif("SUM(A2:C2)", "D2", "E3"), "SUM(B3:D3)", "bereik, rij en kolom");
+    gelijk(verschuif("$A$1+A$1+$A1", "B2", "C4"), "$A$1+B$1+$A3", "absolute delen blijven staan");
+    gelijk(verschuif('IF(A2="B2";Blad1!A2;LOG10(A2))', "B2", "B3"), 'IF(A3="B2";Blad1!A3;LOG10(A3))', "tekst en functienamen blijven staan");
+  });
+  await test("Excel-datums: 1900- en 1904-datumsysteem", () => {
+    const f = new Function(haalFunctie("serieelNaarTekst") + "; return serieelNaarTekst;")();
+    gelijk(f("45292", "datum", false), "01-01-2024", "1900-systeem");
+    gelijk(f("43830", "datum", true), "01-01-2024", "1904-systeem");
+  });
+  await test("Oude versienummers worden als v0.x getoond", () => {
+    const toonVersie = new Function(haalTussen("const toonVersie", "\n") + "; return toonVersie;")();
+    gelijk([toonVersie("v9.1"), toonVersie("v9"), toonVersie(undefined), toonVersie("v1.0")], ["v0.9.1", "v0.9", "v0.8 of ouder", "v1.0"], "versienummers");
   });
 
   browser = await chromium.launch();
@@ -332,6 +358,35 @@ async function download(p, knop) {
     await p.close();
   });
 
+  await test("Excel-bestanden vergelijken: gedeelde formules en 1904-datums", async () => {
+    const m = "Excel";
+    const c = (ref, inhoud, s) => `<c r="${ref}"${s ? ` s="${s}"` : ""}>${inhoud}</c>`;
+    schrijf(`${m}/plan.xlsx`, xlsx([c("A1", "<v>1</v>"), c("B1", '<f t="shared" ref="B1:C1" si="0">A1*2</f><v>2</v>'), c("C1", '<f t="shared" si="0"/><v>4</v>'), c("D1", "<v>43830</v>", 1)], true), 0);
+    schrijf(`${m}/kopie/plan.xlsx`, xlsx([c("A1", "<v>1</v>"), c("B1", '<f t="shared" ref="B1:C1" si="0">A1*3</f><v>3</v>'), c("C1", '<f t="shared" si="0"/><v>9</v>'), c("D1", "<v>43830</v>", 1)], true), 10);
+    p = await nieuwePagina();
+    await analyseer(p, path.join(WERK, m));
+    await p.click('details.groep[data-id="A1"] .vergelijkKnop');
+    await p.waitForFunction(() => /Celverschillen|Geen verschillen/.test(document.querySelector("#diff_A1").textContent));
+    const rijen = await p.$$eval("#diff_A1 tbody tr", r => r.map(x => [...x.cells].map(c => c.textContent)));
+    const cel = ref => (rijen.find(r => r[1] === ref) || []).slice(2);
+    gelijk(cel("C1"), ["=B1*2  →  4", "=B1*3  →  9"], "gedeelde formule in C1 niet goed afgeleid");
+    ok(!rijen.some(r => r[1] === "D1"), "datum in D1 hoort gelijk te zijn");
+    await p.close();
+  });
+  await test("Grote bestanden met dezelfde grootte: eerst begin en eind vergelijken", async () => {
+    const m = "Voorfilter", a = crypto.randomBytes(3 * 1024 * 1024), b = crypto.randomBytes(3 * 1024 * 1024);
+    schrijf(`${m}/een.bin`, a, 0); schrijf(`${m}/x/twee.bin`, a, 10); schrijf(`${m}/drie.bin`, b, 0);
+    p = await nieuwePagina();
+    // Lage grenzen, zodat met kleine bestanden ook het hashen één voor één en in blokken wordt doorlopen
+    await p.evaluate(() => { window.DOUCON_TEST = { exclusiefVanaf: 1024 * 1024, stroomVanaf: 2 * 1024 * 1024 }; });
+    await analyseer(p, path.join(WERK, m));
+    gelijk(await p.evaluate(() => state.res.gehasht), 2, "alleen de twee bestanden met gelijke vingerafdruk horen volledig gehasht te worden");
+    await p.click('.tab[data-tab="inh"]'); await p.click("#alleOpen");
+    const verwacht = crypto.createHash("sha256").update(a).digest("hex");
+    gelijk(await p.$$eval("td.hash", t => t.map(x => x.title)), [verwacht, verwacht], "hash (in blokken berekend) wijkt af");
+    await p.close();
+  });
+
   console.log("\nPrestaties");
   await test("3000 groepen: tabblad openen en filteren binnen redelijke tijd", async () => {
     p = await nieuwePagina();
@@ -345,7 +400,7 @@ async function download(p, knop) {
   });
 
   if (MET_GROOT) {
-    await test("Groot bestand (130 MB) wordt in blokken correct gehasht", async () => {
+    await test("Groot bestand (130 MB, ingebouwde hashfunctie, één tegelijk) wordt correct gehasht", async () => {
       const m = "Groot", data = crypto.randomBytes(130 * 1024 * 1024);
       schrijf(`${m}/groot.bin`, data, 0); schrijf(`${m}/kopie/groot.bin`, data, 10);
       const verwacht = crypto.createHash("sha256").update(data).digest("hex");
